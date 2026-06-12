@@ -23,7 +23,7 @@ export default {
     // the bare apex and the www host.
     const slug = subdomainSlug(host, domain);
     if (slug !== null) {
-      return serveSlug(slug, env);
+      return serveSlug(slug, url.pathname, env);
     }
 
     // --- Apex / www routing -----------------------------------------------

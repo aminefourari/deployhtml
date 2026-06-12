@@ -17,5 +17,7 @@ export interface SlugMeta {
   filename: string;
   size: number;
   uploadedAt: number;
-  expiresAt: number;
+  // Absent on operator-pinned permanent slugs (whose KV entries also carry
+  // no expirationTtl); serve.ts skips the expiry check when missing.
+  expiresAt?: number;
 }
