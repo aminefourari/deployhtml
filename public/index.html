@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deployhtml — drop an HTML file, get a live URL</title>
+<meta name="description" content="Drag and drop a single HTML file and instantly get a live public URL. No signup. Free links expire in 7 days.">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0d12;
+    --panel: #11151d;
+    --border: #232a38;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #7aa2ff;
+    --accent-ink: #0b0d12;
+    --ok: #46d18a;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #161b26 0%, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  header { padding: 28px 24px 0; text-align: center; }
+  .logo { font-weight: 700; letter-spacing: -0.5px; font-size: 20px; }
+  .logo span { color: var(--accent); }
+  main {
+    flex: 1; display: grid; place-items: center; padding: 24px; width: 100%;
+  }
+  .wrap { width: 100%; max-width: 620px; }
+
+  /* Dropzone */
+  .drop {
+    border: 2px dashed var(--border);
+    border-radius: 18px;
+    background: var(--panel);
+    padding: 56px 28px;
+    text-align: center;
+    transition: border-color .15s, background .15s, transform .15s;
+    cursor: pointer;
+  }
+  .drop:hover { border-color: #33415c; }
+  .drop h1 { font-size: 26px; margin: 14px 0 6px; letter-spacing: -0.5px; }
+  .drop p { color: var(--muted); margin: 4px 0; }
+  .drop .icon { font-size: 44px; opacity: .9; }
+  .pick {
+    display: inline-block; margin-top: 18px; padding: 10px 18px;
+    background: var(--accent); color: var(--accent-ink); border-radius: 10px;
+    font-weight: 600;
+  }
+  .hint { margin-top: 18px; color: var(--muted); font-size: 13px; }
+
+  /* Full-page drag overlay */
+  body.dragging::after {
+    content: "Drop to upload";
+    position: fixed; inset: 0; z-index: 50;
+    display: grid; place-items: center;
+    background: rgba(11,13,18,.86);
+    border: 3px dashed var(--accent);
+    color: var(--accent); font-size: 28px; font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .ts { margin-top: 18px; display: flex; justify-content: center; min-height: 1px; }
+
+  /* Status / result */
+  .msg { margin-top: 16px; text-align: center; min-height: 20px; }
+  .msg.err { color: var(--err); }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    display: inline-block; vertical-align: -3px; animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result {
+    display: none; margin-top: 22px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 16px; padding: 22px;
+  }
+  .result.show { display: block; }
+  .result h2 { margin: 0 0 14px; font-size: 18px; }
+  .urlrow { display: flex; gap: 8px; }
+  .urlrow input {
+    flex: 1; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: #0d1118; color: var(--text); font: inherit;
+  }
+  .copy {
+    padding: 11px 16px; border-radius: 10px; border: 1px solid var(--border);
+    background: #1c2230; color: var(--text); font-weight: 600; cursor: pointer;
+  }
+  .copy.copied { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); }
+  .qrbox { display: flex; justify-content: center; margin: 20px 0 8px; }
+  .qrbox svg { width: 168px; height: 168px; background: #fff; padding: 8px; border-radius: 10px; }
+  .expiry { text-align: center; color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .another { display: inline-block; margin-top: 10px; color: var(--accent); cursor: pointer; text-decoration: none; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">Deploy<span>html</span></div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <form id="form" autocomplete="off">
+        <label class="drop" id="drop" for="file">
+          <div class="icon">📄</div>
+          <h1>Drop your HTML file here</h1>
+          <p>or click to choose a single <code>.html</code> file</p>
+          <span class="pick">Choose file</span>
+          <input id="file" type="file" accept=".html,.htm,text/html" hidden>
+          <div class="hint">Max 1&nbsp;MB · one file · instant public URL</div>
+        </label>
+
+        <!-- Cloudflare Turnstile (sitekey injected by the Worker) -->
+        <div class="ts">
+          <div class="cf-turnstile"
+               data-sitekey="__TURNSTILE_SITEKEY__"
+               data-theme="dark"
+               data-callback="onTurnstile"
+               data-expired-callback="onTurnstileExpired"></div>
+        </div>
+
+        <div class="msg" id="msg"></div>
+      </form>
+
+      <section class="result" id="result">
+        <h2>🎉 Your page is live</h2>
+        <div class="urlrow">
+          <input id="url" readonly>
+          <button type="button" class="copy" id="copy">Copy</button>
+        </div>
+        <div class="qrbox" id="qr"></div>
+        <div class="expiry">Free links expire in 7 days.</div>
+        <div style="text-align:center"><a class="another" id="another">Upload another →</a></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    Deployhtml · <a href="/report">Report abuse</a>
+  </footer>
+
+  <script src="/vendor/qrcode.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script>
+    const DOMAIN = "__DOMAIN__";
+    let turnstileToken = "";
+    window.onTurnstile = (t) => { turnstileToken = t; };
+    window.onTurnstileExpired = () => { turnstileToken = ""; };
+
+    const fileInput = document.getElementById("file");
+    const drop = document.getElementById("drop");
+    const msg = document.getElementById("msg");
+    const result = document.getElementById("result");
+    const urlField = document.getElementById("url");
+    const copyBtn = document.getElementById("copy");
+    const qrBox = document.getElementById("qr");
+
+    // --- Full-page drag & drop -------------------------------------------
+    let dragDepth = 0;
+    window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+    window.addEventListener("dragover", (e) => { e.preventDefault(); });
+    window.addEventListener("dragleave", (e) => { e.preventDefault(); if (--dragDepth <= 0) document.body.classList.remove("dragging"); });
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      document.body.classList.remove("dragging");
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    // --- Upload -----------------------------------------------------------
+    async function handleFile(file) {
+      setMsg("");
+      const isHtml = /\.html?$/i.test(file.name) || (file.type || "").includes("text/html");
+      if (!isHtml) return setMsg("Please choose an .html file.", true);
+      if (file.size > 1024 * 1024) return setMsg("File too large — max 1 MB.", true);
+
+      setMsg('<span class="spinner"></span> Uploading…');
+
+      const body = new FormData();
+      body.append("file", file, file.name);
+      body.append("cf-turnstile-response", turnstileToken);
+
+      let res, data;
+      try {
+        res = await fetch("/upload", { method: "POST", body });
+        data = await res.json();
+      } catch {
+        return setMsg("Network error — please try again.", true);
+      }
+
+      if (!res.ok || !data.url) {
+        resetTurnstile();
+        return setMsg((data && data.error) || "Upload failed.", true);
+      }
+
+      setMsg("");
+      showResult(data.url);
+    }
+
+    function showResult(url) {
+      urlField.value = url;
+      result.classList.add("show");
+      result.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // QR code (vendored qrcode-generator, fully offline).
+      qrBox.innerHTML = "";
+      try {
+        const qr = qrcode(0, "M");
+        qr.addData(url);
+        qr.make();
+        qrBox.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 0, scalable: true });
+      } catch (e) {
+        qrBox.textContent = "";
+      }
+    }
+
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(urlField.value);
+      } catch {
+        urlField.select();
+        document.execCommand("copy");
+      }
+      copyBtn.textContent = "Copied!";
+      copyBtn.classList.add("copied");
+      setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("copied"); }, 1600);
+    });
+
+    document.getElementById("another").addEventListener("click", () => {
+      result.classList.remove("show");
+      fileInput.value = "";
+      resetTurnstile();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    function resetTurnstile() {
+      turnstileToken = "";
+      if (window.turnstile && typeof window.turnstile.reset === "function") {
+        try { window.turnstile.reset(); } catch {}
+      }
+    }
+
+    function setMsg(html, isErr) {
+      msg.innerHTML = html;
+      msg.className = "msg" + (isErr ? " err" : "");
+    }
+  </script>
+</body>
+</html>

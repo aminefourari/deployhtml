@@ -1,0 +1,42 @@
+name = "deployhtml"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# ---------------------------------------------------------------------------
+# Routes
+# Both the apex (landing page + API) and every wildcard subdomain (slug serving)
+# are handled by this single Worker. Requires the zone deployhtml.com to exist
+# in your Cloudflare account and a wildcard DNS record for *.deployhtml.com.
+# ---------------------------------------------------------------------------
+routes = [
+  { pattern = "deployhtml.com/*", zone_name = "deployhtml.com" },
+  { pattern = "*.deployhtml.com/*", zone_name = "deployhtml.com" },
+]
+
+# Static landing page. run_worker_first = true so the Worker runs for ALL
+# requests (it injects the Turnstile sitekey into the landing page and routes
+# wildcard subdomains). The Worker calls env.ASSETS.fetch() for static files.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "deployhtml-files"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+DOMAIN = "deployhtml.com"
+# DEV_MODE = "true" bypasses Turnstile verification for local `wrangler dev`.
+# MUST be "false" (or unset) in production.
+DEV_MODE = "false"
+# Turnstile sitekey is PUBLIC and safe to commit. The Worker injects it into
+# the landing page. Replace with your real sitekey.
+TURNSTILE_SITEKEY = "REPLACE_WITH_TURNSTILE_SITEKEY"
+
+# TURNSTILE_SECRET is a secret, NOT set here. Set it with:
+#   wrangler secret put TURNSTILE_SECRET
