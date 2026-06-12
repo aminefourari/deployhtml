@@ -5,129 +5,218 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deployhtml — drop an HTML file, get a live URL</title>
 <meta name="description" content="Drag and drop a single HTML file and instantly get a live public URL. No signup. Free links expire in 7 days.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    color-scheme: dark;
-    --bg: #0b0d12;
-    --panel: #11151d;
-    --border: #232a38;
-    --text: #e6e8ee;
-    --muted: #9aa3b2;
-    --accent: #7aa2ff;
-    --accent-ink: #0b0d12;
-    --ok: #46d18a;
-    --err: #ff6b6b;
+    color-scheme: light;
+    --bg: #FAF6EF;
+    --ink: #2B2520;
+    --muted: rgba(43, 37, 32, .52);
+    --accent: #F59E0B;
+    --accent-deep: #D97E06;
+    --glass: rgba(255, 255, 255, .55);
+    --glass-2: rgba(255, 255, 255, .34);
+    --glass-border: rgba(255, 255, 255, .8);
+    --hairline: rgba(43, 37, 32, .22);
+    --err: #CC3D2E;
+    --shadow: 0 24px 60px rgba(140, 110, 70, .16);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0;
-    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: radial-gradient(1200px 600px at 50% -10%, #161b26 0%, var(--bg) 60%);
-    color: var(--text);
+    font: 16px/1.5 "Outfit", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
     min-height: 100%;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
   }
-  header { padding: 28px 24px 0; text-align: center; }
-  .logo { font-weight: 700; letter-spacing: -0.5px; font-size: 20px; }
-  .logo span { color: var(--accent); }
-  main {
-    flex: 1; display: grid; place-items: center; padding: 24px; width: 100%;
-  }
-  .wrap { width: 100%; max-width: 620px; }
 
-  /* Dropzone */
-  .drop {
-    border: 2px dashed var(--border);
-    border-radius: 18px;
-    background: var(--panel);
-    padding: 56px 28px;
+  /* ---- aurora blobs ---- */
+  .blobs { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(40px); }
+  .blob.b1 { left: -10%; top: -18%; width: 540px; height: 540px; background: radial-gradient(circle, rgba(245,158,11,.30) 0%, transparent 70%); }
+  .blob.b2 { left: 62%;  top: -10%; width: 520px; height: 520px; background: radial-gradient(circle, rgba(255,196,214,.40) 0%, transparent 70%); }
+  .blob.b3 { left: 20%;  top: 60%;  width: 560px; height: 560px; background: radial-gradient(circle, rgba(201,226,255,.40) 0%, transparent 70%); }
+  .blob.b4 { left: 74%;  top: 62%;  width: 420px; height: 420px; background: radial-gradient(circle, rgba(255,217,160,.40) 0%, transparent 70%); }
+
+  header { position: relative; z-index: 1; padding: 26px 36px 0; }
+  .logo { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+  .logo .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(245,158,11,.18); }
+
+  main { position: relative; z-index: 1; flex: 1; display: grid; place-items: center; padding: 28px 16px; width: 100%; }
+
+  /* ---- glass card ---- */
+  .card {
+    width: min(520px, 100%);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 28px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    padding: 38px 38px 30px;
     text-align: center;
-    transition: border-color .15s, background .15s, transform .15s;
-    cursor: pointer;
   }
-  .drop:hover { border-color: #33415c; }
-  .drop h1 { font-size: 26px; margin: 14px 0 6px; letter-spacing: -0.5px; }
-  .drop p { color: var(--muted); margin: 4px 0; }
-  .drop .icon { font-size: 44px; opacity: .9; }
-  .pick {
-    display: inline-block; margin-top: 18px; padding: 10px 18px;
-    background: var(--accent); color: var(--accent-ink); border-radius: 10px;
-    font-weight: 600;
+  @media (prefers-reduced-motion: no-preference) {
+    .card { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   }
-  .hint { margin-top: 18px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 560px) { .card { padding: 28px 22px 24px; } }
 
-  /* Full-page drag overlay */
+  h1 {
+    font-family: "Space Grotesk", "Outfit", sans-serif;
+    font-weight: 600;
+    font-size: clamp(24px, 5vw, 31px);
+    line-height: 1.18;
+    letter-spacing: -0.01em;
+    margin: 0 0 22px;
+    text-wrap: pretty;
+  }
+
+  /* ---- dropzone ---- */
+  .drop {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    border: 1.5px dashed var(--hairline);
+    border-radius: 20px;
+    background: var(--glass-2);
+    padding: 32px 26px;
+    cursor: pointer;
+    transition: border-color .18s, background .18s;
+  }
+  .drop:hover, .drop:focus-within { border-color: var(--accent); background: rgba(255,255,255,.5); }
+  .drop .up {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(245,158,11,.16); color: var(--accent-deep);
+    display: grid; place-items: center; font-size: 22px; font-weight: 700;
+  }
+  .drop strong { font-weight: 600; font-size: 16.5px; }
+  .drop .or { color: var(--muted); font-size: 13.5px; }
+  .pick {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 999px; padding: 12px 28px; cursor: pointer;
+    background: var(--accent); color: #fff;
+    font: 600 15px/1 "Outfit", sans-serif;
+    box-shadow: 0 10px 28px rgba(245,158,11,.35);
+    transition: transform .15s, box-shadow .15s, background .15s;
+  }
+  .pick:hover { background: var(--accent-deep); transform: translateY(-1px); box-shadow: 0 12px 30px rgba(245,158,11,.42); }
+  .pick:active { transform: none; }
+
+  .hint { color: var(--muted); font-size: 13px; margin-top: 18px; }
+  .ts { margin-top: 16px; display: flex; justify-content: center; min-height: 1px; }
+
+  /* ---- status ---- */
+  .msg { margin-top: 14px; min-height: 22px; font-size: 14px; color: var(--muted); }
+  .msg.err { color: var(--err); font-weight: 500; }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--hairline); border-top-color: var(--accent);
+    display: inline-block; vertical-align: -3px; margin-right: 6px;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- result state ---- */
+  .result { display: none; flex-direction: column; align-items: center; gap: 18px; }
+  .card.live .uploader { display: none; }
+  .card.live .result { display: flex; }
+  .check {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-size: 24px; font-weight: 700;
+    box-shadow: 0 12px 30px rgba(245,158,11,.35);
+  }
+  .result h2 {
+    font-family: "Space Grotesk", "Outfit", sans-serif;
+    font-weight: 600; font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; margin: 0;
+  }
+  .urlrow { display: flex; gap: 10px; width: 100%; }
+  .urlrow input {
+    flex: 1; min-width: 0;
+    border: 1px solid var(--glass-border); border-radius: 14px;
+    background: var(--glass-2); color: var(--ink);
+    padding: 13px 16px; font: 500 14.5px/1.2 "Outfit", sans-serif;
+    text-overflow: ellipsis;
+  }
+  .urlrow input:focus { outline: 2px solid rgba(245,158,11,.45); outline-offset: 1px; }
+  .copy {
+    border: 0; border-radius: 14px; padding: 13px 22px; cursor: pointer;
+    background: var(--accent); color: #fff;
+    font: 600 14.5px/1 "Outfit", sans-serif;
+    box-shadow: 0 8px 24px rgba(245,158,11,.35);
+    transition: background .15s;
+  }
+  .copy:hover { background: var(--accent-deep); }
+  .copy.copied { background: #2BA05A; box-shadow: 0 8px 24px rgba(43,160,90,.35); }
+  .qrbox { display: flex; justify-content: center; }
+  .qrbox svg {
+    width: 150px; height: 150px; background: #fff; padding: 12px;
+    border-radius: 16px; box-shadow: 0 12px 32px rgba(0,0,0,.14);
+  }
+  .expiry { color: var(--muted); font-size: 13px; }
+  .another {
+    color: var(--accent-deep); font-weight: 600; font-size: 14px;
+    cursor: pointer; text-decoration: none;
+  }
+  .another:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---- full-page drag overlay ---- */
   body.dragging::after {
     content: "Drop to upload";
     position: fixed; inset: 0; z-index: 50;
     display: grid; place-items: center;
-    background: rgba(11,13,18,.86);
-    border: 3px dashed var(--accent);
-    color: var(--accent); font-size: 28px; font-weight: 700;
-    letter-spacing: -0.5px;
+    background: rgba(250, 246, 239, .55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 2px dashed var(--accent);
+    border-radius: 24px;
+    color: var(--accent-deep);
+    font: 600 26px/1 "Space Grotesk", "Outfit", sans-serif;
+    letter-spacing: -0.01em;
   }
 
-  .ts { margin-top: 18px; display: flex; justify-content: center; min-height: 1px; }
-
-  /* Status / result */
-  .msg { margin-top: 16px; text-align: center; min-height: 20px; }
-  .msg.err { color: var(--err); }
-  .spinner {
-    width: 18px; height: 18px; border-radius: 50%;
-    border: 2px solid var(--border); border-top-color: var(--accent);
-    display: inline-block; vertical-align: -3px; animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .result {
-    display: none; margin-top: 22px; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 16px; padding: 22px;
-  }
-  .result.show { display: block; }
-  .result h2 { margin: 0 0 14px; font-size: 18px; }
-  .urlrow { display: flex; gap: 8px; }
-  .urlrow input {
-    flex: 1; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border);
-    background: #0d1118; color: var(--text); font: inherit;
-  }
-  .copy {
-    padding: 11px 16px; border-radius: 10px; border: 1px solid var(--border);
-    background: #1c2230; color: var(--text); font-weight: 600; cursor: pointer;
-  }
-  .copy.copied { background: var(--ok); color: var(--accent-ink); border-color: var(--ok); }
-  .qrbox { display: flex; justify-content: center; margin: 20px 0 8px; }
-  .qrbox svg { width: 168px; height: 168px; background: #fff; padding: 8px; border-radius: 10px; }
-  .expiry { text-align: center; color: var(--muted); font-size: 13px; margin-top: 6px; }
-  .another { display: inline-block; margin-top: 10px; color: var(--accent); cursor: pointer; text-decoration: none; }
-
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+  footer { position: relative; z-index: 1; text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
   footer a { color: var(--muted); }
 </style>
 </head>
 <body>
+  <div class="blobs" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+  </div>
+
   <header>
-    <div class="logo">Deploy<span>html</span></div>
+    <div class="logo"><span class="dot"></span>deployhtml</div>
   </header>
 
   <main>
-    <div class="wrap">
-      <form id="form" autocomplete="off">
+    <section class="card" id="card">
+      <!-- upload state -->
+      <form class="uploader" id="form" autocomplete="off">
+        <h1>Drop an HTML file. Get a link. That's it.</h1>
+
         <label class="drop" id="drop" for="file">
-          <div class="icon">📄</div>
-          <h1>Drop your HTML file here</h1>
-          <p>or click to choose a single <code>.html</code> file</p>
+          <span class="up">↑</span>
+          <strong>Drag &amp; drop your .html file</strong>
+          <span class="or">or</span>
           <span class="pick">Choose file</span>
           <input id="file" type="file" accept=".html,.htm,text/html" hidden>
-          <div class="hint">Max 1&nbsp;MB · one file · instant public URL</div>
         </label>
+
+        <div class="hint">Max 1&nbsp;MB · free links last 7 days · no signup</div>
 
         <!-- Cloudflare Turnstile (sitekey injected by the Worker) -->
         <div class="ts">
           <div class="cf-turnstile"
                data-sitekey="__TURNSTILE_SITEKEY__"
-               data-theme="dark"
+               data-theme="light"
                data-callback="onTurnstile"
                data-expired-callback="onTurnstileExpired"></div>
         </div>
@@ -135,35 +224,51 @@
         <div class="msg" id="msg"></div>
       </form>
 
-      <section class="result" id="result">
-        <h2>🎉 Your page is live</h2>
+      <!-- live state -->
+      <div class="result" id="result">
+        <div class="check">✓</div>
+        <h2>Your page is live</h2>
         <div class="urlrow">
           <input id="url" readonly>
           <button type="button" class="copy" id="copy">Copy</button>
         </div>
         <div class="qrbox" id="qr"></div>
-        <div class="expiry">Free links expire in 7 days.</div>
-        <div style="text-align:center"><a class="another" id="another">Upload another →</a></div>
-      </section>
-    </div>
+        <div class="expiry">Scan to open on your phone · expires in 7 days</div>
+        <a class="another" id="another">Upload another →</a>
+      </div>
+    </section>
   </main>
 
   <footer>
-    Deployhtml · <a href="/report">Report abuse</a>
+    deployhtml · <a href="/report">report abuse</a>
   </footer>
 
   <script src="/vendor/qrcode.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script>
     const DOMAIN = "__DOMAIN__";
+    const TS_SITEKEY = "__TURNSTILE_SITEKEY__";
     let turnstileToken = "";
+
+    // Load Turnstile only when the Worker has injected a real sitekey
+    // (keeps local preview of this file error-free).
+    if (/^__/.test(TS_SITEKEY)) {
+      document.addEventListener("DOMContentLoaded", () => {
+        const ts = document.querySelector(".ts");
+        if (ts) ts.style.display = "none";
+      });
+    } else {
+      const tsScript = document.createElement("script");
+      tsScript.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      tsScript.async = true;
+      tsScript.defer = true;
+      document.head.appendChild(tsScript);
+    }
     window.onTurnstile = (t) => { turnstileToken = t; };
     window.onTurnstileExpired = () => { turnstileToken = ""; };
 
+    const card = document.getElementById("card");
     const fileInput = document.getElementById("file");
-    const drop = document.getElementById("drop");
     const msg = document.getElementById("msg");
-    const result = document.getElementById("result");
     const urlField = document.getElementById("url");
     const copyBtn = document.getElementById("copy");
     const qrBox = document.getElementById("qr");
@@ -217,8 +322,8 @@
 
     function showResult(url) {
       urlField.value = url;
-      result.classList.add("show");
-      result.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("live");
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
       // QR code (vendored qrcode-generator, fully offline).
       qrBox.innerHTML = "";
@@ -245,7 +350,7 @@
     });
 
     document.getElementById("another").addEventListener("click", () => {
-      result.classList.remove("show");
+      card.classList.remove("live");
       fileInput.value = "";
       resetTurnstile();
       window.scrollTo({ top: 0, behavior: "smooth" });

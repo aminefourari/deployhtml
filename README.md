@@ -90,8 +90,12 @@ id = "PASTE_THE_ID_HERE"
 
 ### 3. Create Turnstile keys
 
-1. Cloudflare dashboard → **Turnstile** → **Add widget**.
-2. Mode: **Managed**. Add hostnames `deployhtml.com` and `*.deployhtml.com`.
+1. Cloudflare dashboard → **Turnstile** → **Add widget** (name it anything, e.g.
+   `deployhtml-upload` — the name is just a label).
+2. Mode: **Managed**. Hostname: add **`deployhtml.com`** only. Turnstile does
+   NOT accept `*.` wildcard syntax, and you don't need it — the widget renders
+   only on the apex homepage (the upload form); hosted `*.deployhtml.com` pages
+   never show it. Subdomains of a listed hostname are trusted automatically.
 3. Copy the **Site Key** into `wrangler.toml` → `TURNSTILE_SITEKEY`
    (it is public; the Worker injects it into the landing page).
 4. Set the **Secret Key** as a Worker secret (never commit it):

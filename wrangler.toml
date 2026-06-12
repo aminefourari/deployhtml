@@ -27,7 +27,7 @@ bucket_name = "deployhtml-files"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "b8a485b457ae45749141304d9c67a4a2"
 
 [vars]
 DOMAIN = "deployhtml.com"
@@ -36,7 +36,7 @@ DOMAIN = "deployhtml.com"
 DEV_MODE = "false"
 # Turnstile sitekey is PUBLIC and safe to commit. The Worker injects it into
 # the landing page. Replace with your real sitekey.
-TURNSTILE_SITEKEY = "REPLACE_WITH_TURNSTILE_SITEKEY"
+TURNSTILE_SITEKEY = "0x4AAAAAADjoEXElHzZ1cUvB"
 
 # TURNSTILE_SECRET is a secret, NOT set here. Set it with:
 #   wrangler secret put TURNSTILE_SECRET
