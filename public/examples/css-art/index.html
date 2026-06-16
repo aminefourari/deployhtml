@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CSS Art — Sunset Desert Landscape</title>
+<meta name="description" content="A layered sunset desert landscape built entirely with CSS — no images, no SVG, no JavaScript.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: system-ui, sans-serif;
+  }
+
+  /* ── Sky gradient ── */
+  body {
+    background: linear-gradient(
+      to bottom,
+      #0d1b3e 0%,
+      #1a2a52 12%,
+      #2d3d6b 22%,
+      #6b3a6b 38%,
+      #c0504a 52%,
+      #e8754a 62%,
+      #f4a06a 72%,
+      #f7c87a 82%,
+      #fae6a0 100%
+    );
+  }
+
+  .scene {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* ── Stars ── */
+  .stars-layer {
+    position: absolute;
+    inset: 0;
+    top: 0;
+    height: 50%;
+  }
+
+  .star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: twinkle ease-in-out infinite alternate;
+  }
+
+  @keyframes twinkle {
+    from { opacity: .9; }
+    to   { opacity: .2; }
+  }
+
+  /* ── Moon ── */
+  .moon {
+    position: absolute;
+    top: 6%;
+    right: 14%;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 38%, #fff5d0, #ffe080 40%, #f0c040);
+    box-shadow:
+      0 0 30px 12px rgba(255,220,80,.30),
+      0 0 80px 30px rgba(255,180,40,.12);
+  }
+
+  .moon::before {
+    content: '';
+    position: absolute;
+    top: 9px; left: 16px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: rgba(200,150,20,.25);
+    box-shadow: 10px 8px 0 rgba(200,150,20,.15), -4px 20px 0 rgba(200,150,20,.10);
+  }
+
+  /* ── Sun (setting, behind dunes) ── */
+  .sun {
+    position: absolute;
+    bottom: 31%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90px;
+    height: 45px; /* half circle, lower half hidden by dune */
+    border-radius: 45px 45px 0 0;
+    background: radial-gradient(circle at 50% 100%, #fff5a0, #ffcc44 35%, #ff8c00 70%, #c43a00);
+    box-shadow: 0 0 60px 30px rgba(255,160,60,.35), 0 0 140px 70px rgba(255,100,20,.14);
+    overflow: hidden;
+  }
+
+  /* ── Light rays ── */
+  .rays {
+    position: absolute;
+    bottom: 31%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+  }
+
+  .ray {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform-origin: bottom center;
+    background: linear-gradient(to top, rgba(255,220,100,.22), transparent);
+    border-radius: 2px;
+    animation: rayPulse ease-in-out infinite alternate;
+  }
+
+  @keyframes rayPulse {
+    from { opacity: .4; }
+    to   { opacity: .8; }
+  }
+
+  /* ── Desert dunes — multiple SVG-less layers ── */
+
+  /* Far dune (lightest, blue-purple tint) */
+  .dune-far {
+    position: absolute;
+    bottom: 22%;
+    left: -5%;
+    width: 110%;
+    height: 26%;
+    background: linear-gradient(to bottom, #6b4a8a 0%, #4a2e6a 30%, #2a1840 100%);
+    border-radius: 100% 100% 0 0 / 80% 80% 0 0;
+  }
+
+  /* Mid dune */
+  .dune-mid {
+    position: absolute;
+    bottom: 14%;
+    left: -8%;
+    width: 120%;
+    height: 28%;
+    background: linear-gradient(to bottom, #a0552a 0%, #7a3a18 35%, #4a1e08 100%);
+    border-radius: 90% 85% 0 0 / 70% 65% 0 0;
+  }
+
+  /* Foreground dune - main large sweep */
+  .dune-near {
+    position: absolute;
+    bottom: 0;
+    left: -5%;
+    width: 115%;
+    height: 38%;
+    background: linear-gradient(
+      to bottom,
+      #c8742a 0%,
+      #a85820 20%,
+      #8a3e12 50%,
+      #5a2008 100%
+    );
+    border-radius: 55% 65% 0 0 / 45% 55% 0 0;
+  }
+
+  /* Second near dune (right side) */
+  .dune-near2 {
+    position: absolute;
+    bottom: 0;
+    right: -8%;
+    width: 65%;
+    height: 32%;
+    background: linear-gradient(
+      150deg,
+      #b86820 0%,
+      #9a4a14 30%,
+      #6a2c08 70%,
+      #3e1404 100%
+    );
+    border-radius: 80% 20% 0 0 / 60% 20% 0 0;
+  }
+
+  /* Dune ridge highlight */
+  .dune-near::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 8%;
+    right: 30%;
+    height: 5px;
+    background: linear-gradient(to right, transparent, rgba(255,200,120,.55) 35%, rgba(255,200,120,.30) 65%, transparent);
+    border-radius: 50%;
+    filter: blur(2px);
+  }
+
+  /* ── Cacti ── */
+  .cactus {
+    position: absolute;
+    bottom: 33%;
+  }
+
+  .cactus .trunk {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2a5c24;
+    border-radius: 6px;
+  }
+
+  .cactus .arm {
+    position: absolute;
+    background: #2a5c24;
+    border-radius: 5px;
+  }
+
+  .cactus .arm-l {
+    left: -100%;
+    border-radius: 5px 5px 0 5px;
+  }
+
+  .cactus .arm-r {
+    right: -100%;
+    border-radius: 5px 5px 5px 0;
+  }
+
+  /* Cactus 1 */
+  .c1 { left: 12%; }
+  .c1 .trunk { width: 14px; height: 70px; }
+  .c1 .arm-l { bottom: 36px; width: 28px; height: 10px; }
+  .c1 .arm-l::after {
+    content: '';
+    position: absolute;
+    top: -14px; right: 0;
+    width: 10px; height: 18px;
+    background: #2a5c24;
+    border-radius: 5px 5px 0 0;
+  }
+  .c1 .arm-r { bottom: 22px; width: 22px; height: 10px; }
+  .c1 .arm-r::after {
+    content: '';
+    position: absolute;
+    top: -12px; left: 0;
+    width: 10px; height: 16px;
+    background: #2a5c24;
+    border-radius: 5px 5px 0 0;
+  }
+
+  /* Cactus 2 (small) */
+  .c2 { left: 22%; bottom: 31%; }
+  .c2 .trunk { width: 9px; height: 42px; }
+  .c2 .arm-r { bottom: 18px; width: 16px; height: 7px; }
+  .c2 .arm-r::after {
+    content: '';
+    position: absolute;
+    top: -10px; left: 0;
+    width: 7px; height: 14px;
+    background: #2a5c24;
+    border-radius: 4px 4px 0 0;
+  }
+
+  /* Cactus 3 (right) */
+  .c3 { right: 16%; }
+  .c3 .trunk { width: 12px; height: 80px; }
+  .c3 .arm-l { bottom: 44px; width: 24px; height: 9px; }
+  .c3 .arm-l::after {
+    content: '';
+    position: absolute;
+    top: -16px; right: 0;
+    width: 9px; height: 20px;
+    background: #2a5c24;
+    border-radius: 5px 5px 0 0;
+  }
+  .c3 .arm-r { bottom: 28px; width: 20px; height: 9px; }
+  .c3 .arm-r::after {
+    content: '';
+    position: absolute;
+    top: -12px; left: 0;
+    width: 9px; height: 16px;
+    background: #2a5c24;
+    border-radius: 5px 5px 0 0;
+  }
+
+  /* ── Horizon glow ── */
+  .horizon-glow {
+    position: absolute;
+    bottom: 28%;
+    left: 0; right: 0;
+    height: 80px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      rgba(255,140,60,.12) 40%,
+      rgba(255,100,20,.08),
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  /* ── Sand ripples ── */
+  .ripples {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 28%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .ripple {
+    position: absolute;
+    left: 5%;
+    right: 5%;
+    height: 1px;
+    background: linear-gradient(to right, transparent 0%, rgba(220,150,60,.25) 20%, rgba(220,150,60,.35) 50%, rgba(220,150,60,.25) 80%, transparent 100%);
+    border-radius: 50%;
+    transform-origin: center;
+  }
+
+  /* ── Caption ── */
+  .caption {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: rgba(255,245,220,.7);
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  /* ── Back link ── */
+  .back {
+    position: fixed;
+    bottom: 18px;
+    left: 22px;
+    z-index: 10;
+    font-size: 13px;
+    color: rgba(255,245,200,.45);
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .back:hover { color: rgba(255,245,200,.9); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .star, .ray { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="/">← deployhtml</a>
+
+  <div class="scene">
+
+    <!-- Stars (positioned via inline style for variety) -->
+    <div class="stars-layer" aria-hidden="true">
+      <div class="star" style="width:2px;height:2px;top:8%;left:6%;animation-duration:2.3s;"></div>
+      <div class="star" style="width:1px;height:1px;top:14%;left:18%;animation-duration:3.1s;animation-delay:-1s;"></div>
+      <div class="star" style="width:2px;height:2px;top:5%;left:33%;animation-duration:2.8s;animation-delay:-.5s;"></div>
+      <div class="star" style="width:1px;height:1px;top:18%;left:46%;animation-duration:1.9s;animation-delay:-1.3s;"></div>
+      <div class="star" style="width:2px;height:2px;top:9%;left:58%;animation-duration:3.5s;animation-delay:-.8s;"></div>
+      <div class="star" style="width:3px;height:3px;top:4%;left:72%;animation-duration:2s;animation-delay:-2s;"></div>
+      <div class="star" style="width:1px;height:1px;top:16%;left:85%;animation-duration:2.6s;animation-delay:-.2s;"></div>
+      <div class="star" style="width:2px;height:2px;top:22%;left:12%;animation-duration:3.2s;animation-delay:-.7s;"></div>
+      <div class="star" style="width:1px;height:1px;top:26%;left:27%;animation-duration:1.7s;animation-delay:-1.5s;"></div>
+      <div class="star" style="width:2px;height:2px;top:20%;left:64%;animation-duration:2.4s;animation-delay:-.4s;"></div>
+      <div class="star" style="width:1px;height:1px;top:30%;left:78%;animation-duration:3s;animation-delay:-1.1s;"></div>
+      <div class="star" style="width:2px;height:2px;top:11%;left:92%;animation-duration:2.2s;animation-delay:-.9s;"></div>
+      <div class="star" style="width:1px;height:1px;top:36%;left:42%;animation-duration:2.9s;animation-delay:-1.8s;"></div>
+      <div class="star" style="width:3px;height:3px;top:7%;left:50%;animation-duration:4s;animation-delay:-3s;"></div>
+    </div>
+
+    <!-- Moon -->
+    <div class="moon" aria-hidden="true"></div>
+
+    <!-- Sun rays -->
+    <div class="rays" aria-hidden="true">
+      <div class="ray" style="height:160px;transform:translateX(-50%) rotate(-80deg);animation-duration:3.2s;"></div>
+      <div class="ray" style="height:200px;transform:translateX(-50%) rotate(-60deg);animation-duration:2.8s;animation-delay:-.5s;"></div>
+      <div class="ray" style="height:180px;transform:translateX(-50%) rotate(-40deg);animation-duration:3.5s;animation-delay:-1s;"></div>
+      <div class="ray" style="height:220px;transform:translateX(-50%) rotate(-20deg);animation-duration:2.5s;animation-delay:-.3s;"></div>
+      <div class="ray" style="height:240px;transform:translateX(-50%) rotate(0deg);animation-duration:3.8s;animation-delay:-1.5s;"></div>
+      <div class="ray" style="height:220px;transform:translateX(-50%) rotate(20deg);animation-duration:2.5s;animation-delay:-.7s;"></div>
+      <div class="ray" style="height:180px;transform:translateX(-50%) rotate(40deg);animation-duration:3.5s;animation-delay:-.2s;"></div>
+      <div class="ray" style="height:200px;transform:translateX(-50%) rotate(60deg);animation-duration:2.8s;animation-delay:-1.2s;"></div>
+      <div class="ray" style="height:160px;transform:translateX(-50%) rotate(80deg);animation-duration:3.2s;animation-delay:-.8s;"></div>
+    </div>
+
+    <!-- Sun -->
+    <div class="sun" aria-hidden="true"></div>
+
+    <!-- Horizon glow -->
+    <div class="horizon-glow" aria-hidden="true"></div>
+
+    <!-- Dunes -->
+    <div class="dune-far" aria-hidden="true"></div>
+    <div class="dune-mid" aria-hidden="true"></div>
+
+    <!-- Cacti -->
+    <div class="cactus c1" role="img" aria-label="cactus">
+      <div class="arm arm-l"></div>
+      <div class="arm arm-r"></div>
+      <div class="trunk"></div>
+    </div>
+    <div class="cactus c2" role="img" aria-label="small cactus">
+      <div class="arm arm-r"></div>
+      <div class="trunk"></div>
+    </div>
+
+    <div class="dune-near" aria-hidden="true"></div>
+    <div class="dune-near2" aria-hidden="true"></div>
+
+    <!-- Foreground cactus (behind nearest dune ridge but visible) -->
+    <div class="cactus c3" role="img" aria-label="cactus">
+      <div class="arm arm-l"></div>
+      <div class="arm arm-r"></div>
+      <div class="trunk"></div>
+    </div>
+
+    <!-- Sand ripples -->
+    <div class="ripples" aria-hidden="true">
+      <div class="ripple" style="bottom:72%;transform:scaleX(.9);"></div>
+      <div class="ripple" style="bottom:58%;transform:scaleX(.8);"></div>
+      <div class="ripple" style="bottom:44%;transform:scaleX(.95);"></div>
+      <div class="ripple" style="bottom:30%;"></div>
+      <div class="ripple" style="bottom:18%;transform:scaleX(.7);left:20%;right:10%;"></div>
+      <div class="ripple" style="bottom:8%;transform:scaleX(.6);left:30%;right:20%;"></div>
+    </div>
+
+    <div class="caption">Pure CSS · No images · No JavaScript</div>
+  </div>
+</body>
+</html>

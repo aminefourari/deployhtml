@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starfield — Canvas Particle Animation</title>
+<meta name="description" content="An interactive canvas starfield with parallax depth layers — click or tap to add a gravity burst.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #050a1a;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+  }
+
+  .back {
+    position: fixed;
+    top: 18px;
+    left: 22px;
+    z-index: 10;
+    font-size: 13px;
+    color: rgba(200,210,255,.4);
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .back:hover { color: rgba(200,210,255,.9); }
+
+  .hud {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    text-align: center;
+    color: rgba(200,210,255,.35);
+    font-size: 12px;
+    letter-spacing: .04em;
+    pointer-events: none;
+    user-select: none;
+    animation: fadehud 3s 2s forwards;
+  }
+  @keyframes fadehud {
+    to { opacity: 0; }
+  }
+
+  .speed-control {
+    position: fixed;
+    top: 18px;
+    right: 22px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .speed-btn {
+    background: rgba(200,210,255,.08);
+    border: 1px solid rgba(200,210,255,.15);
+    color: rgba(200,210,255,.6);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    font-family: inherit;
+  }
+  .speed-btn:hover {
+    background: rgba(200,210,255,.16);
+    color: rgba(200,210,255,.9);
+  }
+  .speed-btn.active {
+    background: rgba(100,140,255,.25);
+    color: rgba(200,220,255,.9);
+    border-color: rgba(100,140,255,.4);
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="/">← deployhtml</a>
+
+  <div class="speed-control">
+    <button class="speed-btn" data-speed="0.5">Slow</button>
+    <button class="speed-btn active" data-speed="1">Normal</button>
+    <button class="speed-btn" data-speed="2.5">Warp</button>
+  </div>
+
+  <div class="hud">Click / tap anywhere to add a gravity burst</div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+  (function () {
+    'use strict';
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    let W, H, cx, cy;
+    let speedMult = 1;
+    let raf;
+    const STAR_COUNT = 420;
+
+    // Gravity bursts: {x,y,r,strength,life}
+    const bursts = [];
+
+    // ── Resize ──────────────────────────────────────────────────────────────
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      cx = W / 2;
+      cy = H / 2;
+    }
+
+    window.addEventListener('resize', () => { resize(); });
+    resize();
+
+    // ── Star class ──────────────────────────────────────────────────────────
+    class Star {
+      constructor(born) {
+        this.reset(born);
+      }
+
+      reset(atCenter) {
+        // Spawn near center so stars stream outward
+        const angle = Math.random() * Math.PI * 2;
+        const radius = atCenter ? Math.random() * 60 : Math.random() * Math.min(W, H) * 0.08;
+        this.x = cx + Math.cos(angle) * radius;
+        this.y = cy + Math.sin(angle) * radius;
+        this.prevX = this.x;
+        this.prevY = this.y;
+
+        // Layer: 0 = far (slow, small, dim), 1 = close (fast, big, bright)
+        this.layer = Math.random();
+        this.baseSpeed = 0.3 + this.layer * 2.2;
+        this.size = 0.5 + this.layer * 2;
+
+        const hue = 200 + Math.random() * 60;
+        const sat = 20 + this.layer * 40;
+        this.color = `hsl(${hue},${sat}%,${60 + this.layer * 40}%)`;
+
+        this.trail = 0.02 + this.layer * 0.18;
+        this.alive = true;
+      }
+
+      update(dt) {
+        // Direction from center
+        const dx = this.x - cx;
+        const dy = this.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        const spd = this.baseSpeed * speedMult * dt * 60;
+
+        // Accumulate gravity attraction from bursts
+        let gx = 0, gy = 0;
+        for (const b of bursts) {
+          if (b.life <= 0) continue;
+          const bx = this.x - b.x;
+          const by = this.y - b.y;
+          const bd = Math.sqrt(bx * bx + by * by) || 1;
+          if (bd < b.r) {
+            const strength = (b.r - bd) / b.r * b.strength * b.life;
+            gx += (bx / bd) * strength;
+            gy += (by / bd) * strength;
+          }
+        }
+
+        this.prevX = this.x;
+        this.prevY = this.y;
+        this.x += nx * spd + gx;
+        this.y += ny * spd + gy;
+
+        // Out of bounds → reset at center
+        if (this.x < -30 || this.x > W + 30 || this.y < -30 || this.y > H + 30) {
+          this.reset(true);
+        }
+      }
+
+      draw() {
+        // Trail line
+        ctx.beginPath();
+        ctx.moveTo(this.prevX, this.prevY);
+        ctx.lineTo(this.x, this.y);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.size;
+        ctx.globalAlpha = 0.25 + this.layer * 0.5 + this.trail;
+        ctx.stroke();
+
+        // Star dot
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = 0.5 + this.layer * 0.5;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ── Init stars ──────────────────────────────────────────────────────────
+    const stars = Array.from({ length: STAR_COUNT }, () => new Star(false));
+
+    // ── Interaction ─────────────────────────────────────────────────────────
+    function addBurst(ex, ey) {
+      bursts.push({ x: ex, y: ey, r: 180, strength: 3.5, life: 1 });
+      // Limit queue
+      if (bursts.length > 8) bursts.shift();
+    }
+
+    canvas.addEventListener('click', (e) => addBurst(e.clientX, e.clientY));
+    canvas.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      if (t) addBurst(t.clientX, t.clientY);
+    });
+
+    // ── Speed buttons ────────────────────────────────────────────────────────
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        speedMult = parseFloat(btn.dataset.speed);
+        document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // ── Loop ─────────────────────────────────────────────────────────────────
+    let last = 0;
+
+    function loop(ts) {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min((ts - last) / 1000, 0.05);
+      last = ts;
+
+      // Fade trail
+      ctx.fillStyle = 'rgba(5,10,26,0.18)';
+      ctx.fillRect(0, 0, W, H);
+
+      // Update bursts
+      for (const b of bursts) {
+        b.life = Math.max(0, b.life - dt * 0.8);
+      }
+
+      // Draw nebula glow at center
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W,H) * 0.25);
+      g.addColorStop(0, 'rgba(60,80,200,.04)');
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // Update & draw stars
+      for (const star of stars) {
+        star.update(dt);
+        star.draw();
+      }
+
+      // Draw burst ripples
+      for (const b of bursts) {
+        if (b.life <= 0) continue;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * (1 - b.life), 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(100,160,255,${b.life * 0.3})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

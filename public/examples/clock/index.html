@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock — Live Analog &amp; Digital</title>
+<meta name="description" content="An elegant live clock with a smooth-sweep analog face and a digital readout — toggle between 12h and 24h.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --face:    #1a1a2e;
+    --face2:   #16213e;
+    --rim:     #0f3460;
+    --hand-h:  #e94560;
+    --hand-m:  #e8e8f0;
+    --hand-s:  #e94560;
+    --tick:    rgba(232,232,240,.55);
+    --tick-5:  rgba(232,232,240,.90);
+    --num:     rgba(232,232,240,.80);
+    --hub:     #e94560;
+    --bg:      #0a0a1a;
+    --glow:    rgba(233,69,96,.35);
+  }
+
+  html, body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: #e8e8f0;
+    overflow: hidden;
+  }
+
+  /* ── Ambient glow bg ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 50%, rgba(15,52,96,.50) 0%, transparent 80%),
+      radial-gradient(ellipse 50% 70% at 70% 30%, rgba(233,69,96,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── Clock wrap ── */
+  .clock-wrap {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+
+  /* ── Analog face ── */
+  .analog {
+    position: relative;
+    width: clamp(220px, 42vmin, 320px);
+    height: clamp(220px, 42vmin, 320px);
+  }
+
+  .face-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #203060, var(--face2) 50%, var(--face) 100%);
+    box-shadow:
+      0 0 0 6px var(--rim),
+      0 0 0 8px rgba(15,52,96,.6),
+      0 0 60px 20px rgba(15,52,96,.4),
+      0 30px 80px rgba(0,0,0,.7),
+      inset 0 1px 0 rgba(255,255,255,.06);
+  }
+
+  /* Tick marks via canvas */
+  canvas.ticks {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+  }
+
+  /* Hands */
+  .hand {
+    position: absolute;
+    bottom: 50%;
+    left: 50%;
+    transform-origin: bottom center;
+    border-radius: 99px;
+    transform: translateX(-50%) rotate(0deg);
+  }
+
+  .hand-hour {
+    width: 5px;
+    height: 30%;
+    background: linear-gradient(to top, var(--hand-h), rgba(232,69,96,.6));
+    margin-left: -2.5px;
+    box-shadow: 0 0 10px 2px var(--glow);
+  }
+
+  .hand-min {
+    width: 3px;
+    height: 40%;
+    background: linear-gradient(to top, var(--hand-m), rgba(232,232,240,.5));
+    margin-left: -1.5px;
+  }
+
+  .hand-sec {
+    width: 2px;
+    height: 44%;
+    background: var(--hand-s);
+    margin-left: -1px;
+    box-shadow: 0 0 6px 1px var(--glow);
+  }
+
+  .hand-sec::before {
+    content: '';
+    position: absolute;
+    bottom: -18%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 18%;
+    background: var(--hand-s);
+    border-radius: 99px;
+    opacity: .6;
+  }
+
+  /* Center hub */
+  .hub {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--hub);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 8px 3px var(--glow);
+    z-index: 2;
+  }
+
+  /* ── Digital readout ── */
+  .digital {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .time-str {
+    font-size: clamp(2.4rem, 8vw, 4rem);
+    font-weight: 200;
+    letter-spacing: .08em;
+    color: #e8e8f0;
+    text-shadow: 0 0 20px rgba(233,69,96,.30);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .time-str .colon {
+    opacity: 1;
+    animation: blinkColon 1s step-end infinite;
+    display: inline-block;
+    margin: 0 2px;
+  }
+
+  @keyframes blinkColon {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .15; }
+  }
+
+  .date-str {
+    margin-top: 8px;
+    font-size: clamp(.75rem, 2.5vw, .9rem);
+    color: rgba(232,232,240,.45);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  /* ── Toggle button ── */
+  .toggle-row {
+    margin-top: 4px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .toggle-btn {
+    background: rgba(232,232,240,.07);
+    border: 1px solid rgba(232,232,240,.14);
+    color: rgba(232,232,240,.5);
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    font-family: inherit;
+    letter-spacing: .05em;
+  }
+  .toggle-btn:hover { background: rgba(232,232,240,.13); color: rgba(232,232,240,.9); }
+  .toggle-btn.active {
+    background: rgba(233,69,96,.18);
+    border-color: rgba(233,69,96,.45);
+    color: #e94560;
+  }
+
+  /* ── Back link ── */
+  .back {
+    position: fixed;
+    top: 18px;
+    left: 22px;
+    z-index: 10;
+    font-size: 13px;
+    color: rgba(232,232,240,.3);
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .back:hover { color: rgba(232,232,240,.8); }
+
+  @media (max-height: 480px) {
+    .clock-wrap { gap: 16px; flex-direction: row; align-items: center; }
+    .date-str, .toggle-row { display: none; }
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="/">← deployhtml</a>
+
+  <div class="clock-wrap">
+    <!-- Analog -->
+    <div class="analog" role="img" aria-label="Analog clock">
+      <div class="face-ring"></div>
+      <canvas class="ticks" id="tickCanvas"></canvas>
+      <div class="hand hand-hour"  id="hHour"></div>
+      <div class="hand hand-min"   id="hMin"></div>
+      <div class="hand hand-sec"   id="hSec"></div>
+      <div class="hub"></div>
+    </div>
+
+    <!-- Digital -->
+    <div class="digital">
+      <div class="time-str" id="timeStr" aria-live="polite" aria-label="Current time">
+        <span id="tH">00</span><span class="colon">:</span><span id="tM">00</span><span class="colon">:</span><span id="tS">00</span><span id="tAmpm" style="font-size:.55em;margin-left:8px;opacity:.6;"></span>
+      </div>
+      <div class="date-str" id="dateStr"></div>
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="btn12">12h</button>
+        <button class="toggle-btn" id="btn24">24h</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    let use24h = false;
+
+    // ── Draw tick marks on canvas ───────────────────────────────────────────
+    const cvs = document.getElementById('tickCanvas');
+
+    function drawTicks() {
+      const s = cvs.width = cvs.height = cvs.offsetWidth * window.devicePixelRatio;
+      const ctx = cvs.getContext('2d');
+      ctx.clearRect(0, 0, s, s);
+      const cx = s / 2, cy = s / 2;
+      const outerR = s * 0.44;
+
+      for (let i = 0; i < 60; i++) {
+        const angle = (i / 60) * Math.PI * 2 - Math.PI / 2;
+        const is5 = i % 5 === 0;
+        const len = is5 ? s * 0.065 : s * 0.028;
+        const width = is5 ? s * 0.009 : s * 0.004;
+        const inner = outerR - len;
+
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
+        ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+        ctx.strokeStyle = is5
+          ? 'rgba(232,232,240,0.90)'
+          : 'rgba(232,232,240,0.35)';
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Hour numbers
+        if (is5) {
+          const num = i === 0 ? 12 : i / 5;
+          const numR = outerR - len - s * 0.065;
+          ctx.fillStyle = 'rgba(232,232,240,0.7)';
+          ctx.font = `${s * 0.055}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(num), cx + Math.cos(angle) * numR, cy + Math.sin(angle) * numR);
+        }
+      }
+    }
+
+    drawTicks();
+    window.addEventListener('resize', drawTicks);
+
+    // ── Update hands + digital ─────────────────────────────────────────────
+    const hH = document.getElementById('hHour');
+    const hM = document.getElementById('hMin');
+    const hS = document.getElementById('hSec');
+    const tH = document.getElementById('tH');
+    const tM = document.getElementById('tM');
+    const tS = document.getElementById('tS');
+    const tAmpm = document.getElementById('tAmpm');
+    const dateStr = document.getElementById('dateStr');
+
+    const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function tick() {
+      const now = new Date();
+      const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds(), ms = now.getMilliseconds();
+
+      // Smooth second hand
+      const sDeg = (s + ms / 1000) * 6;
+      const mDeg = (m + (s + ms / 1000) / 60) * 6;
+      const hDeg = ((h % 12) + m / 60) * 30;
+
+      hH.style.transform = `translateX(-50%) rotate(${hDeg}deg)`;
+      hM.style.transform = `translateX(-50%) rotate(${mDeg}deg)`;
+      hS.style.transform = `translateX(-50%) rotate(${sDeg}deg)`;
+
+      // Digital
+      if (use24h) {
+        tH.textContent = pad(h);
+        tAmpm.textContent = '';
+      } else {
+        const h12 = h % 12 || 12;
+        tH.textContent = pad(h12);
+        tAmpm.textContent = h < 12 ? 'AM' : 'PM';
+      }
+      tM.textContent = pad(m);
+      tS.textContent = pad(s);
+
+      // Date
+      dateStr.textContent = `${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+    }
+
+    tick();
+    setInterval(tick, 50); // 20fps smooth enough for second-hand
+
+    // ── Toggle ─────────────────────────────────────────────────────────────
+    document.getElementById('btn12').addEventListener('click', () => {
+      use24h = false;
+      document.getElementById('btn12').classList.add('active');
+      document.getElementById('btn24').classList.remove('active');
+      tick();
+    });
+    document.getElementById('btn24').addEventListener('click', () => {
+      use24h = true;
+      document.getElementById('btn24').classList.add('active');
+      document.getElementById('btn12').classList.remove('active');
+      tick();
+    });
+  })();
+  </script>
+</body>
+</html>

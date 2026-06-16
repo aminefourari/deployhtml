@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deployhtml — drop an HTML file, get a live URL</title>
-<meta name="description" content="Drag and drop a single HTML file and instantly get a live public URL. No signup. Free links expire in 7 days.">
+<meta name="description" content="Drag and drop an HTML file and instantly get a live public URL. Free links last 7 days — sign in for permanent links and multi-file sites.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -50,7 +50,7 @@
   .nav-link { font-size: 13px; color: rgba(255,255,255,.45); text-decoration: none; }
   .nav-link:hover { color: rgba(255,255,255,.75); }
 
-  main { position: relative; z-index: 1; flex: 1; display: grid; place-items: center; padding: 28px 16px; width: 100%; }
+  main { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 16px; width: 100%; }
 
   /* ---- glass card ---- */
   .card {
@@ -242,6 +242,106 @@
   .proj-submit:disabled { opacity: .6; cursor: not-allowed; }
   .proj-msg { margin-top: 12px; font-size: 13.5px; color: var(--muted); min-height: 20px; }
   .proj-msg.err { color: var(--err); font-weight: 500; }
+
+  /* ---- examples gallery ---- */
+  .examples-section {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 8px 16px 48px;
+  }
+
+  .examples-heading {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+
+  .examples-heading h2 {
+    font-family: "Space Grotesk", "Outfit", sans-serif;
+    font-weight: 600;
+    font-size: clamp(20px, 4vw, 28px);
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+
+  .examples-heading p {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+
+  .examples-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  @media (max-width: 700px) {
+    .examples-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 440px) {
+    .examples-grid { grid-template-columns: 1fr; }
+  }
+
+  .ex-card {
+    display: block;
+    text-decoration: none;
+    color: var(--ink);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    overflow: hidden;
+    transition: transform .18s, box-shadow .18s;
+  }
+
+  .ex-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 28px 70px rgba(140,110,70,.22);
+  }
+
+  .ex-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .ex-swatch {
+    height: 90px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+
+  .ex-body {
+    padding: 14px 16px 16px;
+  }
+
+  .ex-title {
+    font-family: "Space Grotesk", "Outfit", sans-serif;
+    font-weight: 600;
+    font-size: 14.5px;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+
+  .ex-desc {
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .examples-section { animation: rise .5s .1s cubic-bezier(.2,.7,.2,1) both; }
+  }
 </style>
 </head>
 <body>
@@ -271,7 +371,7 @@
           <input id="file" type="file" accept=".html,.htm,text/html" hidden>
         </label>
 
-        <div class="hint">Max 1&nbsp;MB · free links last 7 days · no signup</div>
+        <div class="hint">Max 1&nbsp;MB · free links last 7 days · <a href="/login" style="color:var(--accent-deep);text-decoration:underline;text-underline-offset:2px;">sign in</a> for permanent links &amp; multi-file sites</div>
 
         <!-- Cloudflare Turnstile (sitekey injected by the Worker) -->
         <div class="ts">
@@ -324,6 +424,77 @@
         </p>
         <button type="button" class="proj-submit" id="projSubmit">Deploy project</button>
         <div class="proj-msg" id="projMsg"></div>
+      </div>
+    </div>
+    <!-- Examples gallery -->
+    <div class="examples-section">
+      <div class="examples-heading">
+        <h2>See what you can build</h2>
+        <p>Every page below is a real hosted HTML file — click to open it live.</p>
+      </div>
+
+      <div class="examples-grid">
+
+        <a class="ex-card" href="/examples/aurora/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:linear-gradient(135deg,#1a0a2e 0%,#3a1060 40%,#0d2a5e 70%,#1a0a2e 100%);">
+            <span aria-hidden="true">✦</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">Aurora Hero</div>
+            <p class="ex-desc">Animated CSS gradient landing page — no JavaScript at all.</p>
+          </div>
+        </a>
+
+        <a class="ex-card" href="/examples/starfield/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:linear-gradient(160deg,#050a1a 0%,#0d1b3e 50%,#050a1a 100%);">
+            <span aria-hidden="true">★</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">Starfield</div>
+            <p class="ex-desc">Canvas particle animation with parallax depth — click to burst.</p>
+          </div>
+        </a>
+
+        <a class="ex-card" href="/examples/css-art/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:linear-gradient(to bottom,#0d1b3e 0%,#6b3a6b 40%,#c0504a 65%,#e8754a 80%,#f4a06a 100%);">
+            <span aria-hidden="true">🌵</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">CSS Art</div>
+            <p class="ex-desc">Desert sunset landscape built entirely with CSS — zero images.</p>
+          </div>
+        </a>
+
+        <a class="ex-card" href="/examples/clock/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:radial-gradient(ellipse at 50% 50%,#1a2248 0%,#0a0a1a 100%);">
+            <span aria-hidden="true">🕐</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">Live Clock</div>
+            <p class="ex-desc">Smooth-sweep analog face + digital readout, 12h/24h toggle.</p>
+          </div>
+        </a>
+
+        <a class="ex-card" href="/examples/pricing/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:linear-gradient(135deg,#f0eeff 0%,#e8f4ff 50%,#f0eeff 100%);">
+            <span aria-hidden="true">💎</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">Pricing Page</div>
+            <p class="ex-desc">3-tier marketing page with glass cards and billing toggle.</p>
+          </div>
+        </a>
+
+        <a class="ex-card" href="/examples/game/" target="_blank" rel="noopener">
+          <div class="ex-swatch" style="background:linear-gradient(160deg,#0b0e1a 0%,#0f1830 50%,#0b0e1a 100%);">
+            <span aria-hidden="true">🧱</span>
+          </div>
+          <div class="ex-body">
+            <div class="ex-title">Breakout Game</div>
+            <p class="ex-desc">Playable canvas game with keyboard &amp; touch controls, hi-score.</p>
+          </div>
+        </a>
+
       </div>
     </div>
   </main>
