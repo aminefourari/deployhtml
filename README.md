@@ -189,6 +189,77 @@ sender domain in Resend.
 
 ---
 
+## Multi-file projects (CSS, JS, images)
+
+Logged-in users can deploy a whole static site — a folder of files or a `.zip` archive — at a single slug. Every asset is served with its correct `Content-Type` so CSS, JS, and images actually load.
+
+### How to deploy
+
+**Via the landing page UI:**
+1. Sign in, then expand "Deploy a folder or .zip" below the single-file dropzone.
+2. Choose **Folder / files** (select your project folder via the directory picker) or **ZIP archive** (select a `.zip` file).
+3. Click **Deploy project**. The slug URL appears immediately.
+
+**Via API (authenticated):**
+```bash
+# Zip method
+curl -b cookies.txt -X POST https://deployhtml.com/upload/project \
+  -F "zip=@/path/to/site.zip"
+
+# Individual files method (relative paths preserve folder structure)
+curl -b cookies.txt -X POST https://deployhtml.com/upload/project \
+  -F "file=@index.html;filename=index.html" \
+  -F "file=@css/app.css;filename=css/app.css" \
+  -F "file=@app.js;filename=app.js"
+```
+Response: `{ url, slug, permanent: true, files: <count> }`
+
+### Requirements and limits
+
+- Must contain **`index.html` at the project root** (not in a subfolder).
+- Max **200 files** per project.
+- Max **10 MB** total uncompressed size.
+- Max **2 MB** per individual file.
+- Paths are **case-sensitive** (R2 keys preserve case).
+
+### Allowed file types
+
+| Extension | Content-Type |
+|-----------|-------------|
+| html, htm | text/html |
+| css | text/css |
+| js, mjs | text/javascript |
+| json, map | application/json |
+| svg | image/svg+xml |
+| png | image/png |
+| jpg, jpeg | image/jpeg |
+| gif | image/gif |
+| webp | image/webp |
+| ico | image/x-icon |
+| woff | font/woff |
+| woff2 | font/woff2 |
+| ttf | font/ttf |
+| txt | text/plain |
+
+Files with unlisted extensions are rejected at upload time with a `415` error.
+
+### How serving works
+
+- `https://<slug>.deployhtml.com/` and `/index.html` both serve the root `index.html`.
+- All other paths (`/css/app.css`, `/app.js`, etc.) are served directly from R2 with the correct `Content-Type`.
+- HTML files get the footer badge injected (same as single-file deploys).
+- Non-HTML assets (`css`, `js`, images, fonts) are served raw — no footer injection.
+- `X-Content-Type-Options: nosniff` is set on all responses, so assets must have correct content types (they do, set at upload time).
+- Project links are **permanent** (never expire) — same as other logged-in deploys.
+
+### Security
+
+- Anonymous callers to `POST /upload/project` receive `401`.
+- Path traversal attempts (e.g. `../` in zip entries or filenames) are rejected at upload time with `415`.
+- Encoded traversal in request paths (e.g. `/%2e%2e/`) is blocked by the `safeRelPath` validator at serve time.
+
+---
+
 ## Accounts (Better Auth + D1)
 
 Authentication uses [Better Auth](https://better-auth.com) backed by Cloudflare D1.
