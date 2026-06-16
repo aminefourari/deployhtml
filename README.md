@@ -189,6 +189,42 @@ sender domain in Resend.
 
 ---
 
+## Accounts (Better Auth + D1)
+
+Authentication uses [Better Auth](https://better-auth.com) backed by Cloudflare D1.
+Routes: `GET /login`, `GET /signup`, `GET /account`, `POST /api/auth/*`.
+
+### Setup (operator steps — production)
+
+**1. Create the D1 database**
+```bash
+npx wrangler d1 create deployhtml-auth
+# Paste the printed database_id into wrangler.toml [[d1_databases]] block.
+```
+
+**2. Apply migrations**
+```bash
+# Local development:
+npx wrangler d1 migrations apply deployhtml-auth --local
+# Production (remote):
+npx wrangler d1 migrations apply deployhtml-auth --remote
+```
+
+**3. Set the auth secret**
+```bash
+npx wrangler secret put BETTER_AUTH_SECRET
+# Enter a long random string (32+ chars). Never commit a real value.
+```
+
+For local development, create `.dev.vars` (already git-ignored):
+```
+BETTER_AUTH_SECRET=dev-only-secret-change-me-32chars-min
+```
+
+The auth `baseURL` is derived from the incoming request origin — no `BETTER_AUTH_URL` variable is needed or used.
+
+---
+
 ## Roadmap hooks (paid features later)
 
 The structure is intentionally modular so paid tiers slot in without rewrites:
