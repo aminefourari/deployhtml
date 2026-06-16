@@ -1,5 +1,5 @@
 import { Env } from "./env";
-import { handleUpload } from "./upload";
+import { handleUpload, handleProjectUpload } from "./upload";
 import { handleReport } from "./report";
 import { serveSlug } from "./serve";
 import { createAuth } from "./auth";
@@ -37,6 +37,13 @@ export default {
         return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
       }
       return handleUpload(request, env);
+    }
+
+    if (path === "/upload/project") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleProjectUpload(request, env);
     }
 
     if (path === "/report") {

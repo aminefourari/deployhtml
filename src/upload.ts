@@ -4,6 +4,7 @@ import { generateSlug } from "./slug";
 import { scanContent } from "./scan";
 import { getSession } from "./authpages";
 import { recordDeploy } from "./deploys";
+import { parseProject, CONTENT_TYPES, extOf } from "./projects";
 
 // POST /upload — accepts one HTML file, returns { url, slug, expiresAt }.
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
@@ -164,4 +165,35 @@ function json(obj: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
+}
+
+// POST /upload/project — accepts a folder (multiple files) or a .zip archive,
+// stores assets at <slug>/<relpath> in R2 with correct content types.
+// Requires an authenticated session — anonymous callers receive 401.
+export async function handleProjectUpload(request: Request, env: Env): Promise<Response> {
+  const session = await getSession(request, env);
+  const ownerId = session?.user?.id;
+  if (!ownerId) return json({ error: "Sign in to deploy a project." }, 401);
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  if (!(await underRateLimit(env, ip))) return json({ error: "Rate limit reached." }, 429);
+  let form: FormData;
+  try { form = await request.formData(); } catch { return json({ error: "Expected multipart/form-data." }, 400); }
+  const parsed = await parseProject(form, env);
+  if ("error" in parsed) return json({ error: parsed.error }, parsed.status);
+  let slug = "";
+  for (let i = 0; i < 6; i++) {
+    const c = generateSlug();
+    if (!(await env.KV.get(`slug:${c}`))) { slug = c; break; }
+  }
+  if (!slug) return json({ error: "Could not allocate a slug, please retry." }, 503);
+  for (const e of parsed.entries) {
+    const ct = CONTENT_TYPES[extOf(e.path)] ?? "application/octet-stream";
+    await env.BUCKET.put(`${slug}/${e.path}`, e.bytes, { httpMetadata: { contentType: ct } });
+  }
+  const now = Date.now();
+  const meta: SlugMeta = { filename: parsed.name, size: parsed.totalBytes, uploadedAt: now, owner: ownerId, kind: "project", fileCount: parsed.entries.length };
+  await env.KV.put(`slug:${slug}`, JSON.stringify(meta));
+  await recordDeploy(env, { slug, ownerId, kind: "project", name: parsed.name, size: parsed.totalBytes, fileCount: parsed.entries.length, createdAt: now });
+  await bumpRateLimit(env, ip);
+  return json({ url: `https://${slug}.${env.DOMAIN}`, slug, permanent: true, files: parsed.entries.length });
 }
