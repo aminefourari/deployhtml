@@ -184,6 +184,64 @@
 
   footer { position: relative; z-index: 1; text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
   footer a { color: var(--muted); }
+
+  /* ---- project upload section ---- */
+  .proj-section {
+    position: relative; z-index: 1;
+    width: min(520px, 100%);
+    margin: 0 auto 24px;
+    padding: 0 16px;
+  }
+  .proj-toggle {
+    width: 100%; background: none; border: 1.5px dashed var(--hairline);
+    border-radius: 20px; padding: 16px 24px; cursor: pointer;
+    font: 600 15px/1.2 "Outfit", sans-serif; color: var(--muted);
+    transition: border-color .18s, color .18s;
+    text-align: center;
+  }
+  .proj-toggle:hover { border-color: var(--accent); color: var(--accent-deep); }
+  .proj-body {
+    display: none;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    padding: 24px;
+    margin-top: 8px;
+  }
+  .proj-body.open { display: block; }
+  .proj-body h3 { font-family: "Space Grotesk", sans-serif; margin: 0 0 16px; font-size: 17px; }
+  .proj-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .proj-tab {
+    flex: 1; border: 1.5px solid var(--hairline); background: var(--glass-2);
+    border-radius: 12px; padding: 10px 8px; cursor: pointer;
+    font: 500 13.5px/1 "Outfit", sans-serif; color: var(--muted);
+    transition: border-color .18s, color .18s, background .18s;
+  }
+  .proj-tab.active { border-color: var(--accent); color: var(--accent-deep); background: rgba(245,158,11,.08); }
+  .proj-input-area { margin-bottom: 14px; }
+  .proj-file-input {
+    display: block; width: 100%; border: 1.5px dashed var(--hairline);
+    border-radius: 14px; padding: 14px 16px; cursor: pointer;
+    font: 15px "Outfit", sans-serif; color: var(--muted);
+    background: var(--glass-2);
+    transition: border-color .18s;
+  }
+  .proj-file-input:hover { border-color: var(--accent); }
+  .proj-hint { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .proj-submit {
+    width: 100%; border: 0; border-radius: 14px; padding: 13px 24px; cursor: pointer;
+    background: var(--accent); color: #fff;
+    font: 600 15px/1 "Outfit", sans-serif;
+    box-shadow: 0 8px 24px rgba(245,158,11,.35);
+    transition: background .15s;
+  }
+  .proj-submit:hover { background: var(--accent-deep); }
+  .proj-submit:disabled { opacity: .6; cursor: not-allowed; }
+  .proj-msg { margin-top: 12px; font-size: 13.5px; color: var(--muted); min-height: 20px; }
+  .proj-msg.err { color: var(--err); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -240,6 +298,34 @@
         <a class="another" id="another">Upload another →</a>
       </div>
     </section>
+
+    <!-- project / multi-file upload (logged-in only) -->
+    <div class="proj-section" id="projSection">
+      <button type="button" class="proj-toggle" id="projToggle">
+        + Deploy a folder or .zip (CSS, JS, images) — sign in required
+      </button>
+      <div class="proj-body" id="projBody">
+        <h3>Deploy a multi-file project</h3>
+        <div class="proj-tabs">
+          <button type="button" class="proj-tab active" id="tabFolder" data-tab="folder">Folder / files</button>
+          <button type="button" class="proj-tab" id="tabZip" data-tab="zip">ZIP archive</button>
+        </div>
+        <div class="proj-input-area">
+          <label id="labelFolder">
+            <input type="file" id="projFolder" webkitdirectory multiple class="proj-file-input">
+          </label>
+          <label id="labelZip" style="display:none">
+            <input type="file" id="projZip" accept=".zip" class="proj-file-input">
+          </label>
+        </div>
+        <p class="proj-hint">
+          Must contain <code>index.html</code> at root. Max 200 files · 10&nbsp;MB total · 2&nbsp;MB per file.
+          Allowed: html, css, js, json, svg, png, jpg, gif, webp, ico, woff, woff2, ttf, txt.
+        </p>
+        <button type="button" class="proj-submit" id="projSubmit">Deploy project</button>
+        <div class="proj-msg" id="projMsg"></div>
+      </div>
+    </div>
   </main>
 
   <footer>
@@ -378,6 +464,73 @@
       msg.innerHTML = html;
       msg.className = "msg" + (isErr ? " err" : "");
     }
+
+    // ---- Project upload ----------------------------------------------------
+    const projToggle = document.getElementById("projToggle");
+    const projBody   = document.getElementById("projBody");
+    const projMsg    = document.getElementById("projMsg");
+    const projSubmit = document.getElementById("projSubmit");
+    const tabFolder  = document.getElementById("tabFolder");
+    const tabZip     = document.getElementById("tabZip");
+    const labelFolder = document.getElementById("labelFolder");
+    const labelZip    = document.getElementById("labelZip");
+    const projFolder  = document.getElementById("projFolder");
+    const projZip     = document.getElementById("projZip");
+    let projMode = "folder";
+
+    projToggle.addEventListener("click", () => {
+      const open = projBody.classList.toggle("open");
+      projToggle.textContent = open
+        ? "- Deploy a folder or .zip (CSS, JS, images) — sign in required"
+        : "+ Deploy a folder or .zip (CSS, JS, images) — sign in required";
+    });
+
+    function switchTab(mode) {
+      projMode = mode;
+      tabFolder.classList.toggle("active", mode === "folder");
+      tabZip.classList.toggle("active", mode === "zip");
+      labelFolder.style.display = mode === "folder" ? "" : "none";
+      labelZip.style.display    = mode === "zip"    ? "" : "none";
+    }
+    tabFolder.addEventListener("click", () => switchTab("folder"));
+    tabZip.addEventListener("click",    () => switchTab("zip"));
+
+    function setProjMsg(text, isErr) {
+      projMsg.textContent = text;
+      projMsg.className = "proj-msg" + (isErr ? " err" : "");
+    }
+
+    projSubmit.addEventListener("click", async () => {
+      setProjMsg("");
+      const body = new FormData();
+      if (projMode === "zip") {
+        const f = projZip.files && projZip.files[0];
+        if (!f) return setProjMsg("Please choose a .zip file.", true);
+        body.append("zip", f, f.name);
+      } else {
+        const files = projFolder.files;
+        if (!files || files.length === 0) return setProjMsg("Please choose a folder or files.", true);
+        for (const f of files) {
+          body.append("file", f, f.webkitRelativePath || f.name);
+        }
+      }
+      projSubmit.disabled = true;
+      setProjMsg("Deploying…");
+      let res, data;
+      try {
+        res  = await fetch("/upload/project", { method: "POST", body });
+        data = await res.json();
+      } catch {
+        projSubmit.disabled = false;
+        return setProjMsg("Network error — please try again.", true);
+      }
+      projSubmit.disabled = false;
+      if (!res.ok || !data.url) {
+        return setProjMsg((data && data.error) || "Upload failed.", true);
+      }
+      setProjMsg("");
+      showResult(data.url, true);
+    });
   </script>
 </body>
 </html>
