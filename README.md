@@ -194,6 +194,8 @@ sender domain in Resend.
 Authentication uses [Better Auth](https://better-auth.com) backed by Cloudflare D1.
 Routes: `GET /login`, `GET /signup`, `GET /account`, `POST /api/auth/*`.
 
+Logged-in uploads produce **permanent links** that never expire and appear in the uploader's dashboard at `GET /dashboard`. From the dashboard, owners can delete their pages (R2 object + KV key + D1 row removed). Anonymous uploads are completely unchanged: 7-day TTL, no login required.
+
 ### Setup (operator steps — production)
 
 **1. Create the D1 database**
