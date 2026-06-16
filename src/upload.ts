@@ -2,6 +2,8 @@ import { Env, SlugMeta } from "./env";
 import { CONFIG } from "./config";
 import { generateSlug } from "./slug";
 import { scanContent } from "./scan";
+import { getSession } from "./authpages";
+import { recordDeploy } from "./deploys";
 
 // POST /upload — accepts one HTML file, returns { url, slug, expiresAt }.
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
@@ -73,14 +75,42 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     return json({ error: "Could not allocate a slug, please retry." }, 503);
   }
 
-  // 8) Store file in R2 + metadata in KV with TTL.
+  // 8) Store file in R2, then branch on session: permanent (logged-in) vs TTL (anon).
   const now = Date.now();
-  const expiresAt = now + CONFIG.ttlSeconds * 1000;
-  const meta: SlugMeta = { filename: file.name, size: file.size, uploadedAt: now, expiresAt };
+  const session = await getSession(request, env);
+  const ownerId = session?.user?.id ?? null;
 
   await env.BUCKET.put(`${slug}.html`, text, {
     httpMetadata: { contentType: "text/html; charset=utf-8" },
   });
+
+  if (ownerId) {
+    // Logged-in: permanent link — no TTL on KV, no expiresAt in meta.
+    const meta: SlugMeta = {
+      filename: file.name,
+      size: file.size,
+      uploadedAt: now,
+      owner: ownerId,
+      kind: "single",
+      fileCount: 1,
+    };
+    await env.KV.put(`slug:${slug}`, JSON.stringify(meta)); // no expirationTtl
+    await recordDeploy(env, {
+      slug,
+      ownerId,
+      kind: "single",
+      name: file.name,
+      size: file.size,
+      fileCount: 1,
+      createdAt: now,
+    });
+    await bumpRateLimit(env, ip);
+    return json({ url: `https://${slug}.${env.DOMAIN}`, slug, permanent: true });
+  }
+
+  // Anonymous: 7-day TTL, unchanged from before.
+  const expiresAt = now + CONFIG.ttlSeconds * 1000;
+  const meta: SlugMeta = { filename: file.name, size: file.size, uploadedAt: now, expiresAt };
   await env.KV.put(`slug:${slug}`, JSON.stringify(meta), { expirationTtl: CONFIG.ttlSeconds });
 
   // 9) Count this successful upload against the rate limit.
