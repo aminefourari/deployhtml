@@ -4,6 +4,7 @@ import { handleReport } from "./report";
 import { serveSlug } from "./serve";
 import { createAuth } from "./auth";
 import { handleLogin, handleSignup, handleAccount } from "./authpages";
+import { handleDashboard, handleDashboardDelete } from "./dashboard";
 
 // Single Worker entrypoint. Dispatches by hostname then path:
 //   <slug>.<domain>        -> serveSlug          (hosted user pages)
@@ -49,6 +50,14 @@ export default {
     if (path === "/login") return handleLogin(request, env);
     if (path === "/signup") return handleSignup(request, env);
     if (path === "/account") return handleAccount(request, env);
+
+    if (path === "/dashboard") return handleDashboard(request, env);
+    if (path === "/dashboard/delete") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleDashboardDelete(request, env);
+    }
 
     if (path === "/" || path === "/index.html") {
       return serveLanding(request, env);
