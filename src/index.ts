@@ -3,7 +3,7 @@ import { handleUpload, handleProjectUpload } from "./upload";
 import { handleReport } from "./report";
 import { serveSlug } from "./serve";
 import { createAuth } from "./auth";
-import { handleLogin, handleSignup, handleAccount } from "./authpages";
+import { handleLogin, handleSignup, handleAccount, getSession } from "./authpages";
 import { handleDashboard, handleDashboardDelete, handleRename, handleSlugAvailable } from "./dashboard";
 import { handleEditor, handleEditorSave } from "./editor";
 import { lookupCustomDomain, handleAddDomain, handleDomainStatus, handleRemoveDomain } from "./customdomains";
@@ -153,11 +153,22 @@ async function serveLanding(request: Request, env: Env): Promise<Response> {
   html = html
     .replaceAll("__TURNSTILE_SITEKEY__", env.TURNSTILE_SITEKEY)
     .replaceAll("__DOMAIN__", env.DOMAIN);
+
+  // Auth-aware top nav: mark the bar .is-authed when a session cookie is present
+  // so the page shows Dashboard (and hides Sign in / Get started) for logged-in users.
+  const session = await getSession(request, env);
+  if (session) {
+    html = html.replace('class="topnav"', 'class="topnav is-authed"');
+  }
+
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
+      // Response varies by session — never let a shared cache serve one user's
+      // authed nav to another visitor.
+      "Cache-Control": "private, no-cache",
     },
   });
 }
