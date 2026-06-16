@@ -4,7 +4,10 @@ import { handleReport } from "./report";
 import { serveSlug } from "./serve";
 import { createAuth } from "./auth";
 import { handleLogin, handleSignup, handleAccount } from "./authpages";
-import { handleDashboard, handleDashboardDelete } from "./dashboard";
+import { handleDashboard, handleDashboardDelete, handleRename, handleSlugAvailable } from "./dashboard";
+import { handleEditor, handleEditorSave } from "./editor";
+import { lookupCustomDomain, handleAddDomain, handleDomainStatus, handleRemoveDomain } from "./customdomains";
+import { notFoundResponse } from "./notfound";
 
 // Single Worker entrypoint. Dispatches by hostname then path:
 //   <slug>.<domain>        -> serveSlug          (hosted user pages)
@@ -27,6 +30,17 @@ export default {
     const slug = subdomainSlug(host, domain);
     if (slug !== null) {
       return serveSlug(slug, url.pathname, env);
+    }
+
+    // --- Custom domains ----------------------------------------------------
+    // A foreign host (not our apex/www or a dev host) may be a connected custom
+    // domain. If it's mapped, serve its page; otherwise fall through to apex
+    // routing (preserving local-dev on 127.0.0.1 and the old foreign-host path).
+    if (!isOurApex(host, domain)) {
+      const mapped = await lookupCustomDomain(env, host);
+      if (mapped !== null) {
+        return serveSlug(mapped, url.pathname, env);
+      }
     }
 
     // --- Apex / www routing -----------------------------------------------
@@ -65,6 +79,34 @@ export default {
       }
       return handleDashboardDelete(request, env);
     }
+    if (path === "/dashboard/slug-available") return handleSlugAvailable(request, env);
+    if (path === "/dashboard/rename") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleRename(request, env);
+    }
+
+    if (path === "/edit") return handleEditor(request, env);
+    if (path === "/edit/save") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleEditorSave(request, env);
+    }
+    if (path === "/edit/domain/status") return handleDomainStatus(request, env);
+    if (path === "/edit/domain/remove") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleRemoveDomain(request, env);
+    }
+    if (path === "/edit/domain") {
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+      }
+      return handleAddDomain(request, env);
+    }
 
     if (path === "/" || path === "/index.html") {
       return serveLanding(request, env);
@@ -74,6 +116,16 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+// Our own apex / www / dev hosts — these are served by apex routing, never
+// treated as a custom domain (so local dev on 127.0.0.1 and the apex are safe).
+function isOurApex(host: string, domain: string): boolean {
+  if (host === "127.0.0.1" || host === "0.0.0.0" || host === "[::1]") return true;
+  for (const base of [domain, "localhost"]) {
+    if (host === base || host === `www.${base}`) return true;
+  }
+  return false;
+}
 
 // Returns the slug label for a serving subdomain, or null if `host` is the
 // apex / www / not under our domain.

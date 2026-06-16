@@ -12,6 +12,17 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   // Secret — set via `wrangler secret put BETTER_AUTH_SECRET`.
   BETTER_AUTH_SECRET?: string;
+
+  // --- Custom domains (Cloudflare for SaaS / Custom Hostnames) --------------
+  // The whole feature self-gates: it is inert unless BOTH the token and zone id
+  // are present, so it ships safely before SSL for SaaS is enabled.
+  // Secret — scoped API token with SSL/custom-hostname edit on the zone.
+  CF_API_TOKEN?: string;
+  // The zone id that owns the apex domain.
+  CF_ZONE_ID?: string;
+  // Hostname users CNAME their domain to (the zone's fallback origin).
+  // Defaults to the apex DOMAIN when unset.
+  CF_FALLBACK_ORIGIN?: string;
 }
 
 // Metadata stored in KV under `slug:<slug>`. New optional fields can be added

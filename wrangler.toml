@@ -44,6 +44,8 @@ DEV_MODE = "false"
 # Turnstile sitekey is PUBLIC and safe to commit. The Worker injects it into
 # the landing page. Replace with your real sitekey.
 TURNSTILE_SITEKEY = "0x4AAAAAADjoEXElHzZ1cUvB"
+CF_ZONE_ID = "c62d5781ced6c15a5de4fe4a9c304201"
+CF_FALLBACK_ORIGIN = "cname.deployhtml.com" 
 
 # TURNSTILE_SECRET is a secret, NOT set here. Set it with:
 #   wrangler secret put TURNSTILE_SECRET
