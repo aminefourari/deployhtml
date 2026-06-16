@@ -2,6 +2,7 @@ import { Env, SlugMeta } from "./env";
 import { CONFIG } from "./config";
 import { SLUG_RE } from "./slug";
 import { notFoundResponse } from "./notfound";
+import { CONTENT_TYPES, extOf, safeRelPath } from "./projects";
 
 // Serve a hosted page for <slug>.<domain>[/<path>].
 //
@@ -30,6 +31,10 @@ export async function serveSlug(slug: string, pathname: string, env: Env): Promi
     return notFoundResponse(env.DOMAIN);
   }
 
+  if (meta.kind === "project") {
+    return serveProjectAsset(slug, pathname, env);
+  }
+
   const subKey = subpageKey(slug, pathname);
   let obj = subKey ? await env.BUCKET.get(subKey) : null;
   if (!obj) obj = await env.BUCKET.get(`${slug}.html`);
@@ -42,6 +47,33 @@ export async function serveSlug(slug: string, pathname: string, env: Env): Promi
     status: 200,
     headers: securityHeaders(),
   });
+}
+
+// Serve a project (multi-file) asset. Looks up <slug>/<relpath> in R2 and
+// returns it with the correct content type. HTML files get the footer injected
+// and the CSP frame-ancestors header; non-HTML assets are served raw so that
+// CSS/JS/images load correctly (nosniff requires exact content types).
+async function serveProjectAsset(slug: string, pathname: string, env: Env): Promise<Response> {
+  const trimmed = pathname.replace(/^\/+/, "");
+  const relRaw = trimmed === "" || trimmed === "index.html" ? "index.html" : trimmed;
+  const rel = safeRelPath(relRaw);
+  if (!rel) return notFoundResponse(env.DOMAIN);
+  const obj = await env.BUCKET.get(`${slug}/${rel}`);
+  if (!obj) return notFoundResponse(env.DOMAIN);
+  const ext = extOf(rel);
+  const ct = CONTENT_TYPES[ext] ?? "application/octet-stream";
+  const headers: Record<string, string> = {
+    "Content-Type": ct,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "public, max-age=60",
+  };
+  if (ext === "html" || ext === "htm") {
+    headers["Content-Security-Policy"] = "frame-ancestors 'none'";
+    const html = injectFooter(await obj.text(), slug, env.DOMAIN);
+    return new Response(html, { status: 200, headers });
+  }
+  return new Response(obj.body, { status: 200, headers });
 }
 
 // Map a request path to a subpage R2 key, or null when the path is the root
