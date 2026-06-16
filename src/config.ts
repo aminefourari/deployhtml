@@ -16,4 +16,11 @@ export const CONFIG = {
 
   /** Report link label in the footer badge. */
   reportLabel: "Report abuse",
+
+  /** Per-file size cap inside a project (bytes). */
+  projectMaxFileBytes: 2 * 1024 * 1024,
+  /** Total uncompressed project size cap (bytes). */
+  projectMaxTotalBytes: 10 * 1024 * 1024,
+  /** Max number of files in a project. */
+  projectMaxFiles: 200,
 } as const;
