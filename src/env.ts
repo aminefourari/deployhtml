@@ -23,4 +23,9 @@ export interface SlugMeta {
   // Absent on operator-pinned permanent slugs (whose KV entries also carry
   // no expirationTtl); serve.ts skips the expiry check when missing.
   expiresAt?: number;
+  // Absent on anonymous uploads; set to Better Auth user.id when logged in.
+  owner?: string;
+  // Forward-compat for plan 003 (multi-file projects).
+  kind?: "single" | "project";
+  fileCount?: number;
 }
