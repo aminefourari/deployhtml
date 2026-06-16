@@ -44,9 +44,11 @@
   .blob.b3 { left: 20%;  top: 60%;  width: 560px; height: 560px; background: radial-gradient(circle, rgba(201,226,255,.40) 0%, transparent 70%); }
   .blob.b4 { left: 74%;  top: 62%;  width: 420px; height: 420px; background: radial-gradient(circle, rgba(255,217,160,.40) 0%, transparent 70%); }
 
-  header { position: relative; z-index: 1; padding: 26px 36px 0; }
+  header { position: relative; z-index: 1; padding: 26px 36px 0; display: flex; align-items: center; justify-content: space-between; }
   .logo { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
   .logo .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(245,158,11,.18); }
+  .nav-link { font-size: 13px; color: rgba(255,255,255,.45); text-decoration: none; }
+  .nav-link:hover { color: rgba(255,255,255,.75); }
 
   main { position: relative; z-index: 1; flex: 1; display: grid; place-items: center; padding: 28px 16px; width: 100%; }
 
@@ -194,6 +196,7 @@
 
   <header>
     <div class="logo"><span class="dot"></span>deployhtml</div>
+    <a class="nav-link" href="/dashboard">My pages</a>
   </header>
 
   <main>
@@ -317,13 +320,21 @@
       }
 
       setMsg("");
-      showResult(data.url);
+      showResult(data.url, data.permanent === true);
     }
 
-    function showResult(url) {
+    function showResult(url, permanent) {
       urlField.value = url;
       card.classList.add("live");
       window.scrollTo({ top: 0, behavior: "smooth" });
+
+      // Update expiry line based on whether the link is permanent.
+      const expiryEl = document.querySelector(".expiry");
+      if (expiryEl) {
+        expiryEl.textContent = permanent
+          ? "Permanent link — never expires"
+          : "Scan to open on your phone · expires in 7 days";
+      }
 
       // QR code (vendored qrcode-generator, fully offline).
       qrBox.innerHTML = "";
