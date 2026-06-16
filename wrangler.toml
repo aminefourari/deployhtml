@@ -1,6 +1,7 @@
 name = "deployhtml"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -28,6 +29,12 @@ bucket_name = "deployhtml-files"
 [[kv_namespaces]]
 binding = "KV"
 id = "b8a485b457ae45749141304d9c67a4a2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "deployhtml-auth"
+database_id = "094c47f1-13f8-46d6-a89d-6feb62055971"
+migrations_dir = "migrations"
 
 [vars]
 DOMAIN = "deployhtml.com"
