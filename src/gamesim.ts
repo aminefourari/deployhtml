@@ -138,3 +138,46 @@ export function stepBot(
   }
   return { fired };
 }
+
+export interface Box { min: Vec3; max: Vec3; }
+
+// Deterministically regenerate the SAME city the client draws from `seed`, so
+// the server can reason about cover / line-of-sight. MUST consume rng() in the
+// exact same order and count as the client's builder (incl. the colour draw)
+// to stay in lockstep — otherwise server cover wouldn't match what players see.
+export function generateBuildings(seed: number): Box[] {
+  const rng = mulberry32(seed);
+  const boxes: Box[] = [];
+  for (let i = 0; i < 140; i++) {
+    const w = 30 + rng() * 50, d = 30 + rng() * 50, h = 50 + rng() * 260;
+    const x = (rng() * 2 - 1) * ARENA * 0.92, z = (rng() * 2 - 1) * ARENA * 0.92;
+    rng(); // colour index — consumed to keep the sequence identical to the client
+    boxes.push({ min: [x - w / 2, 0, z - d / 2], max: [x + w / 2, h, z + d / 2] });
+  }
+  return boxes;
+}
+
+// Does the segment p0->p1 intersect the axis-aligned box? Slab method clamped
+// to the segment range [0,1].
+export function segmentHitsBox(p0: Vec3, p1: Vec3, min: Vec3, max: Vec3): boolean {
+  let tmin = 0, tmax = 1;
+  for (let i = 0; i < 3; i++) {
+    const d = p1[i] - p0[i];
+    if (Math.abs(d) < 1e-9) {
+      if (p0[i] < min[i] || p0[i] > max[i]) return false;
+    } else {
+      let t1 = (min[i] - p0[i]) / d, t2 = (max[i] - p0[i]) / d;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return false;
+    }
+  }
+  return true;
+}
+
+// True if any building stands on the straight line between p0 and p1.
+export function lineOfSightBlocked(p0: Vec3, p1: Vec3, boxes: Box[]): boolean {
+  for (const b of boxes) if (segmentHitsBox(p0, p1, b.min, b.max)) return true;
+  return false;
+}

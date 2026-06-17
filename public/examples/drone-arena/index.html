@@ -47,7 +47,7 @@
       <p class="tag">Fly into a shared neon city and dogfight real players + AI drones.<br>Powered by Cloudflare Durable Objects.</p>
       <input id="name" maxlength="16" placeholder="Call sign" autocomplete="off">
       <button class="btn" id="play">Join the arena</button>
-      <div class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly · mouse aim · click fire · <kbd>Space</kbd>/<kbd>Shift</kbd> altitude</div>
+      <div class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly · mouse aim · <kbd>Space</kbd> / click fire · <kbd>E</kbd>/<kbd>Q</kbd> up·down</div>
     </div>
   </div>
   <div class="overlay" id="err" hidden>
@@ -58,7 +58,7 @@
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
   </script>
   <script type="module">
-    import { hitsBox, pickRayTarget } from "./arena-math.js";
+    import { hitsBox, pickRayTarget, segmentHitsBox } from "./arena-math.js";
     let THREE;
     try {
       THREE = await import("three");
@@ -140,7 +140,11 @@
     }
 
     const keys = Object.create(null);
-    addEventListener("keydown", (e) => { keys[e.code] = true; if (["Space","ShiftLeft"].includes(e.code)) e.preventDefault(); });
+    addEventListener("keydown", (e) => {
+      if (e.target && e.target.tagName === "INPUT") return;   // don't capture keys while typing the call-sign
+      keys[e.code] = true;
+      if (e.code === "Space") { e.preventDefault(); tryFire(); }   // Space fires
+    });
     addEventListener("keyup", (e) => { keys[e.code] = false; });
     addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
     let yaw = 0, pitch = 0;
@@ -153,12 +157,14 @@
 
     function updateLocalDrone(dt) {
       const fwd = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      // chase cam looks toward +Z (opposite of Three's default -Z view), which
+      // flips screen left/right — so the strafe-right axis is negated here.
+      const right = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
       const accel = new THREE.Vector3();
       const SP = 360;
       if (keys.KeyW) accel.add(fwd); if (keys.KeyS) accel.sub(fwd);
       if (keys.KeyD) accel.add(right); if (keys.KeyA) accel.sub(right);
-      if (keys.Space) accel.y += 1; if (keys.ShiftLeft) accel.y -= 1;
+      if (keys.KeyE) accel.y += 1; if (keys.KeyQ) accel.y -= 1;
       if (accel.lengthSq() > 0) accel.normalize().multiplyScalar(SP);
       me.vel.addScaledVector(accel, dt);
       me.vel.multiplyScalar(Math.exp(-1.8 * dt));            // drag
@@ -306,9 +312,14 @@
       ws.send(JSON.stringify({ t: "fire", o: origin.toArray(), d: dir.toArray() }));
       spawnTracer(origin, origin.clone().addScaledVector(dir, 900), 0x9fe8ff);
 
-      // client-side hit detection vs remote drones (ray-sphere, nearest in front; see arena-math.js)
+      // client-side hit detection vs remote drones (ray-sphere, nearest in front; see arena-math.js).
+      // Skip any target with a building between us — buildings are real cover.
       const targets = [];
-      for (const [id, r] of remotes) if (r.mesh.visible) targets.push({ id, pos: r.mesh.position });
+      for (const [id, r] of remotes) {
+        if (!r.mesh.visible) continue;
+        if (buildings.some((b) => segmentHitsBox(origin, r.mesh.position, b.userData.box.min, b.userData.box.max))) continue;
+        targets.push({ id, pos: r.mesh.position });
+      }
       const hitId = pickRayTarget(origin, dir, targets, 7);   // drone hit radius ~7
       if (hitId) ws.send(JSON.stringify({ t: "hit", id: hitId }));
     }

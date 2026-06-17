@@ -85,3 +85,35 @@ test("stepBot with no target just drifts in bounds", () => {
   assert.equal(out.fired, false);
   assert.ok(bot.p[1] >= FLOOR && bot.p[1] <= CEIL);
 });
+
+import { generateBuildings, segmentHitsBox, lineOfSightBlocked } from "../src/gamesim.ts";
+
+test("generateBuildings is deterministic and bounded", () => {
+  const a = generateBuildings(424242);
+  const b = generateBuildings(424242);
+  assert.equal(a.length, 140);
+  assert.deepEqual(a, b);                                   // same seed -> identical city
+  for (const box of a) {
+    assert.ok(box.min[0] < box.max[0] && box.min[1] < box.max[1] && box.min[2] < box.max[2]);
+    assert.equal(box.min[1], 0);                            // buildings sit on the ground
+  }
+  assert.notDeepEqual(generateBuildings(1), generateBuildings(2));
+});
+
+test("segmentHitsBox: a line through the box hits it", () => {
+  assert.equal(segmentHitsBox([-50, 0, 0], [50, 0, 0], [-10, -10, -10], [10, 10, 10]), true);
+});
+
+test("segmentHitsBox: a line passing beside the box misses", () => {
+  assert.equal(segmentHitsBox([-50, 50, 0], [50, 50, 0], [-10, -10, -10], [10, 10, 10]), false);
+});
+
+test("segmentHitsBox: a line that stops short of the box does not hit", () => {
+  assert.equal(segmentHitsBox([-50, 0, 0], [-20, 0, 0], [-10, -10, -10], [10, 10, 10]), false);
+});
+
+test("lineOfSightBlocked: a building between two points blocks LoS; a clear lane does not", () => {
+  const boxes = [{ min: [-5, 0, 40] as Vec3, max: [5, 100, 60] as Vec3 }];
+  assert.equal(lineOfSightBlocked([0, 50, 0], [0, 50, 120], boxes), true);    // wall at z~50 between
+  assert.equal(lineOfSightBlocked([0, 50, 0], [200, 50, 0], boxes), false);   // clear along x
+});

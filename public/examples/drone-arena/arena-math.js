@@ -24,6 +24,26 @@ export function raySphere(origin, dir, center, rad) {
   return tca;
 }
 
+// Does the segment p0->p1 intersect the axis-aligned box (min/max)? Slab method
+// clamped to the segment range [0,1]. Points/corners use .x/.y/.z (THREE vectors
+// or plain objects). Used as a line-of-sight test so buildings give real cover.
+export function segmentHitsBox(p0, p1, min, max) {
+  let tmin = 0, tmax = 1;
+  for (const ax of ["x", "y", "z"]) {
+    const d = p1[ax] - p0[ax];
+    if (Math.abs(d) < 1e-9) {
+      if (p0[ax] < min[ax] || p0[ax] > max[ax]) return false;
+    } else {
+      let t1 = (min[ax] - p0[ax]) / d, t2 = (max[ax] - p0[ax]) / d;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return false;
+    }
+  }
+  return true;
+}
+
 // Of the candidate targets the shot could hit, return the id of the NEAREST one
 // (or null). `targets` is a list of { id, pos } where pos has .x/.y/.z.
 export function pickRayTarget(origin, dir, targets, rad) {

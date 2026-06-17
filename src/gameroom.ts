@@ -1,8 +1,8 @@
 import { Env } from "./env";
 import {
   Vec3, Quat, MAX_PLAYERS, BOT_TARGET, HP_MAX, KILLS_TO_WIN, INVULN_MS, RESPAWN_MS,
-  HIT_COOLDOWN_MS, Bot, mulberry32, validateName, sanitizeState, RateLimiter,
-  pickSpawn, applyHit, stepBot,
+  HIT_COOLDOWN_MS, Bot, Box, mulberry32, validateName, sanitizeState, RateLimiter,
+  pickSpawn, applyHit, stepBot, generateBuildings, lineOfSightBlocked,
 } from "./gamesim";
 
 const round = (a: number[]) => a.map((n) => Math.round(n * 100) / 100);
@@ -26,6 +26,8 @@ export class GameRoom {
   private bots = new Map<string, Bot & { id: string; name: string; deadUntil: number }>();
   private botSeq = 1;
   private rng = mulberry32(this.seed ^ 0x9e3779b9);
+  // Same city the clients render (from `seed`), so bots respect cover.
+  private buildings: Box[] = generateBuildings(this.seed);
 
   constructor(private state: DurableObjectState, private env: Env) {}
 
@@ -123,8 +125,9 @@ export class GameRoom {
         if (d < best) { best = d; target = h; }
       }
       const r = stepBot(bot, target, 0.066, now, this.rng);
-      if (r.fired && target && best < 300 && this.rng() < 0.25) {
-        // bot lands a probabilistic hit on its target human
+      if (r.fired && target && best < 300 && this.rng() < 0.25 &&
+          !lineOfSightBlocked(bot.p, target.p, this.buildings)) {
+        // bot lands a probabilistic hit on its target human (needs clear line of sight)
         const res = applyHit(target as any, now);
         if (res.applied) {
           this.broadcast({ t: "event", k: "hit", id: target.id, by: bot.id });

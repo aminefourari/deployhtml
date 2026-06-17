@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // Import the SAME module the browser client imports, so these tests cover the
 // real fight/collision logic the game runs — not a copy.
-import { hitsBox, raySphere, pickRayTarget } from "../public/examples/drone-arena/arena-math.js";
+import { hitsBox, raySphere, pickRayTarget, segmentHitsBox } from "../public/examples/drone-arena/arena-math.js";
 import { applyHit } from "../src/gamesim.ts";
 
 // A sample building footprint: 40 wide on X, 40 deep on Z, 200 tall,
@@ -102,4 +102,29 @@ test("a shot that misses leaves HP untouched", () => {
   assert.equal(hitId, null);
   // no hit -> no applyHit call -> hp stays full
   assert.equal(target.hp, 100);
+});
+
+// ---------------------------------------------------------------------------
+// Cover: a building on the shot line blocks the hit (line-of-sight)
+// ---------------------------------------------------------------------------
+
+const bmin = { x: -5, y: 0, z: -5 };
+const bmax = { x: 5, y: 200, z: 5 };
+
+test("segmentHitsBox: a shot line passing through a building is blocked", () => {
+  assert.equal(segmentHitsBox({ x: -50, y: 30, z: 0 }, { x: 50, y: 30, z: 0 }, bmin, bmax), true);
+});
+
+test("segmentHitsBox: a shot line clear of the building is not blocked", () => {
+  assert.equal(segmentHitsBox({ x: -50, y: 250, z: 0 }, { x: 50, y: 250, z: 0 }, bmin, bmax), false);
+});
+
+test("a player shot is dropped when a building stands between shooter and target", () => {
+  const origin = { x: -50, y: 30, z: 0 };
+  const target = { id: "enemy", pos: { x: 50, y: 30, z: 0 } };
+  // building sits between origin and target -> no clear line of sight
+  const blocked = segmentHitsBox(origin, target.pos, bmin, bmax);
+  const candidates = blocked ? [] : [target];
+  assert.equal(blocked, true);
+  assert.equal(pickRayTarget(origin, { x: 1, y: 0, z: 0 }, candidates, 7), null);
 });
