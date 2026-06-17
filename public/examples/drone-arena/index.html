@@ -256,17 +256,71 @@
         v: me.vel.toArray().map((n) => +n.toFixed(2)) }));
     }
 
+    // ---- combat FX ----
+    const tracers = [];   // { line, life }
+    const bursts = [];    // { pts, vel, life }
+    let fireAt = 0;
+
+    function spawnTracer(from, to, color) {
+      const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true }));
+      scene.add(line); tracers.push({ line, life: 0.12 });
+    }
+    function spawnBurst(at, color) {
+      const n = 40, pos = new Float32Array(n * 3), vel = [];
+      for (let i = 0; i < n; i++) { pos.set([at.x, at.y, at.z], i*3);
+        vel.push(new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).multiplyScalar(60)); }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size: 2.5 }));
+      scene.add(pts); bursts.push({ pts, vel, life: 0.7 });
+    }
+
+    function tryFire() {
+      if (!ws || ws.readyState !== 1 || performance.now() < fireAt) return;
+      fireAt = performance.now() + 180;
+      const origin = me.pos.clone();
+      const dir = new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), Math.cos(yaw)*Math.cos(pitch)).normalize();
+      ws.send(JSON.stringify({ t: "fire", o: origin.toArray(), d: dir.toArray() }));
+      spawnTracer(origin, origin.clone().addScaledVector(dir, 900), 0x9fe8ff);
+
+      // client-side hit detection vs remote drones (ray-sphere, nearest in front)
+      let hitId = null, bestT = Infinity;
+      for (const [id, r] of remotes) {
+        if (!r.mesh.visible) continue;
+        const oc = r.mesh.position.clone().sub(origin);
+        const tca = oc.dot(dir); if (tca < 0) continue;
+        const d2 = oc.lengthSq() - tca*tca;
+        if (d2 < 49 && tca < bestT) { bestT = tca; hitId = id; }   // radius ~7
+      }
+      if (hitId) ws.send(JSON.stringify({ t: "hit", id: hitId }));
+    }
+    addEventListener("mousedown", (e) => { if (e.button === 0 && document.pointerLockElement) tryFire(); });
+
+    function updateFx(dt) {
+      for (let i = tracers.length - 1; i >= 0; i--) { const tr = tracers[i]; tr.life -= dt;
+        if (tr.life <= 0) { scene.remove(tr.line); tracers.splice(i,1); } else tr.line.material.opacity = tr.life/0.12; }
+      for (let i = bursts.length - 1; i >= 0; i--) { const b = bursts[i]; b.life -= dt;
+        const pos = b.pts.geometry.attributes.position;
+        for (let j = 0; j < b.vel.length; j++) { pos.array[j*3]+=b.vel[j].x*dt; pos.array[j*3+1]+=b.vel[j].y*dt; pos.array[j*3+2]+=b.vel[j].z*dt; }
+        pos.needsUpdate = true;
+        if (b.life <= 0) { scene.remove(b.pts); bursts.splice(i,1); } }
+    }
+
     let lastT = 0, pendingName = null;
     function buildWorldFromSeed() {
       initWorld(worldSeed);
       me.mesh = makeDrone(0x38bdf8); me.mesh.position.copy(me.pos); scene.add(me.mesh);
-      renderer.setAnimationLoop((t) => {
-        const dt = Math.min(0.05, (t - lastT) / 1000 || 0); lastT = t;
-        updateLocalDrone(dt);
-        interpolateRemotes(dt);
-        sendState(dt);
-        renderer.render(scene, camera);
-      });
+      renderer.setAnimationLoop(mainLoop);
+    }
+
+    function mainLoop(t) {
+      const dt = Math.min(0.05, (t - lastT) / 1000 || 0); lastT = t;
+      updateLocalDrone(dt);
+      interpolateRemotes(dt);
+      updateFx(dt);
+      sendState(dt);
+      renderer.render(scene, camera);
     }
 
     function startGame(name) {
@@ -281,7 +335,34 @@
       scoreboardEl.innerHTML = scores.sort((a,b)=>b.score-a.score).slice(0,6)
         .map((s) => `<span class="chip">${s.name}: <b>${s.score}</b></span>`).join("");
     }
-    function onEvent(m) { /* Task 11 */ }
+    const respawnEl = document.getElementById("respawn");
+    function onEvent(m) {
+      if (m.k === "fire") {
+        const o = new THREE.Vector3().fromArray(m.o), d = new THREE.Vector3().fromArray(m.d);
+        spawnTracer(o, o.clone().addScaledVector(d, 900), 0xff9ec2);
+      } else if (m.k === "hit") {
+        const r = remotes.get(m.id); if (r) spawnBurst(r.mesh.position, 0xffd27a);
+        if (m.id === myId) { me.hp = (me.hp ?? 100) - 13; if (me.hp <= 0) showDeath(); }
+      } else if (m.k === "kill") {
+        const r = remotes.get(m.id); if (r) spawnBurst(r.mesh.position, 0xff5a5a);
+        if (m.id === myId) showDeath();
+      }
+    }
+    let dead = false;
+    function showDeath() {
+      if (dead) return;
+      dead = true;
+      respawnEl.style.display = "flex";
+      if (document.exitPointerLock) document.exitPointerLock();   // free the cursor so the overlay is clickable
+      renderer.setAnimationLoop(renderStill);   // freeze local control while dead
+    }
+    function renderStill() { interpolateRemotes(0.016); updateFx(0.016); renderer.render(scene, camera); }
+    respawnEl.addEventListener("click", () => {
+      respawnEl.style.display = "none"; dead = false;
+      me.hp = 100; me.pos.set((Math.random()*2-1)*300, 120, (Math.random()*2-1)*300); me.vel.set(0, 0, 0);
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "respawn" }));
+      renderer.setAnimationLoop(mainLoop);
+    });
     // ===== GAME CODE ends here =====
   </script>
 </body>
