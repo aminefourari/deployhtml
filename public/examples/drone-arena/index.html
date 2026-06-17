@@ -321,6 +321,19 @@
       // last resort: just below the ceiling, above every building top (~316) so it's clear and not clamped away
       return new THREE.Vector3((Math.random()*2-1)*460, 322, (Math.random()*2-1)*460);
     }
+    // Pull the chase camera in toward the drone if a building sits behind it, so
+    // we never end up looking through a wall.
+    function clampCamera(desired) {
+      const dir = desired.clone().sub(me.pos);
+      const dist = dir.length();
+      if (dist < 0.01) return desired.clone();
+      dir.divideScalar(dist);
+      let clear = dist;
+      for (let t = 6; t <= dist; t += 3) {
+        if (insideBuilding(me.pos.clone().addScaledVector(dir, t), 2)) { clear = t - 3; break; }
+      }
+      return me.pos.clone().addScaledVector(dir, Math.max(6, clear));
+    }
 
     function updateLocalDrone(dt) {
       const fwd = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
@@ -354,7 +367,7 @@
 
       // chase cam behind + above the drone
       const camOff = new THREE.Vector3(-Math.sin(yaw) * 26, 9, -Math.cos(yaw) * 26);
-      camera.position.lerp(me.pos.clone().add(camOff), Math.min(1, dt * 6));
+      camera.position.lerp(clampCamera(me.pos.clone().add(camOff)), Math.min(1, dt * 6));
       camera.lookAt(me.pos.clone().addScaledVector(fwd, 30));
     }
 
