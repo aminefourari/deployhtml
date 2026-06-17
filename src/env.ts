@@ -4,6 +4,7 @@ export interface Env {
   KV: KVNamespace;
   ASSETS: Fetcher;
   DB: D1Database;
+  GAME_ROOM: DurableObjectNamespace;
 
   DOMAIN: string;
   DEV_MODE: string;

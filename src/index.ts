@@ -1,4 +1,5 @@
 import { Env } from "./env";
+export { GameRoom } from "./gameroom";
 import { handleUpload, handleProjectUpload } from "./upload";
 import { handleReport } from "./report";
 import { serveSlug } from "./serve";
