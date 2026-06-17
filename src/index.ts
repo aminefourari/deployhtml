@@ -109,6 +109,14 @@ export default {
       return handleAddDomain(request, env);
     }
 
+    if (path === "/examples/drone-arena/ws") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("Upgrade Required", { status: 426 });
+      }
+      const id = env.GAME_ROOM.idFromName("global");
+      return env.GAME_ROOM.get(id).fetch(request);
+    }
+
     if (path === "/" || path === "/index.html") {
       return serveLanding(request, env);
     }
