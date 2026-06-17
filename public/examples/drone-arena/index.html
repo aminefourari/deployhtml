@@ -184,16 +184,104 @@
       camera.lookAt(me.pos.clone().addScaledVector(fwd, 30));
     }
 
-    let lastT = 0;
-    function startGame(name) {
-      initWorld(20260617);
+    // ---- networking ----
+    let ws = null, myId = null, worldSeed = 20260617;
+    const remotes = new Map();   // id -> { mesh, label?, tp, cp, name, hp }
+    const BOT_COLOR = 0xf43f5e, PLAYER_COLOR = 0xa78bfa;
+    let statusEl, scoreboardEl;
+
+    function connect(name) {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/examples/drone-arena/ws`);
+      ws.addEventListener("open", () => { ws.send(JSON.stringify({ t: "join", name })); statusEl.textContent = "online"; });
+      ws.addEventListener("message", (e) => onNet(JSON.parse(e.data)));
+      ws.addEventListener("close", () => { statusEl.textContent = "reconnecting…"; setTimeout(() => connect(name), 1500); });
+      ws.addEventListener("error", () => ws.close());
+    }
+
+    function onNet(m) {
+      if (m.t === "welcome") {
+        myId = m.id; worldSeed = m.seed; window.__killsToWin = m.killsToWin;
+        if (!scene) buildWorldFromSeed();
+      } else if (m.t === "snapshot") {
+        applySnapshot(m);
+      } else if (m.t === "event") {
+        onEvent(m);
+      }
+    }
+
+    function ensureRemote(id, isBot) {
+      let r = remotes.get(id);
+      if (!r) {
+        const mesh = makeDrone(isBot ? BOT_COLOR : PLAYER_COLOR); scene.add(mesh);
+        r = { mesh, tp: null, cp: null }; remotes.set(id, r);
+      }
+      return r;
+    }
+
+    function applySnapshot(m) {
+      const seen = new Set([myId]);
+      for (const list of [m.players, m.bots]) {
+        const isBot = list === m.bots;
+        for (const e of list) {
+          if (e.id === myId) continue;
+          seen.add(e.id);
+          const r = ensureRemote(e.id, isBot);
+          r.tp = { p: e.p, q: e.q };
+          r.mesh.visible = e.alive;
+        }
+      }
+      for (const [id, r] of remotes) if (!seen.has(id)) { scene.remove(r.mesh); remotes.delete(id); }
+      updateScoreboard(m.scores);
+    }
+
+    function interpolateRemotes(dt) {
+      for (const r of remotes.values()) {
+        if (!r.tp) continue;
+        const tp = new THREE.Vector3().fromArray(r.tp.p);
+        r.mesh.position.lerp(tp, Math.min(1, dt * 10));
+        const tq = new THREE.Quaternion().fromArray(r.tp.q);
+        r.mesh.quaternion.slerp(tq, Math.min(1, dt * 10));
+      }
+    }
+
+    let netAccum = 0;
+    function sendState(dt) {
+      if (!ws || ws.readyState !== 1) return;
+      netAccum += dt;
+      if (netAccum < 0.066) return; netAccum = 0;
+      ws.send(JSON.stringify({ t: "state",
+        p: me.pos.toArray().map((n) => +n.toFixed(2)),
+        q: me.mesh.quaternion.toArray().map((n) => +n.toFixed(3)),
+        v: me.vel.toArray().map((n) => +n.toFixed(2)) }));
+    }
+
+    let lastT = 0, pendingName = null;
+    function buildWorldFromSeed() {
+      initWorld(worldSeed);
       me.mesh = makeDrone(0x38bdf8); me.mesh.position.copy(me.pos); scene.add(me.mesh);
       renderer.setAnimationLoop((t) => {
         const dt = Math.min(0.05, (t - lastT) / 1000 || 0); lastT = t;
         updateLocalDrone(dt);
+        interpolateRemotes(dt);
+        sendState(dt);
         renderer.render(scene, camera);
       });
     }
+
+    function startGame(name) {
+      pendingName = name;
+      statusEl = document.getElementById("status");
+      scoreboardEl = document.getElementById("scoreboard");
+      connect(name);          // welcome -> buildWorldFromSeed()
+    }
+
+    function updateScoreboard(scores) {
+      if (!scores) return;
+      scoreboardEl.innerHTML = scores.sort((a,b)=>b.score-a.score).slice(0,6)
+        .map((s) => `<span class="chip">${s.name}: <b>${s.score}</b></span>`).join("");
+    }
+    function onEvent(m) { /* Task 11 */ }
     // ===== GAME CODE ends here =====
   </script>
 </body>
