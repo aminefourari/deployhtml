@@ -1,8 +1,11 @@
 import { Env } from "./env";
 import {
-  Vec3, Quat, MAX_PLAYERS, HP_MAX, KILLS_TO_WIN, INVULN_MS,
-  mulberry32, validateName, sanitizeState, RateLimiter, pickSpawn,
+  Vec3, Quat, MAX_PLAYERS, BOT_TARGET, HP_MAX, KILLS_TO_WIN, INVULN_MS, RESPAWN_MS,
+  HIT_COOLDOWN_MS, Bot, mulberry32, validateName, sanitizeState, RateLimiter,
+  pickSpawn, applyHit, stepBot,
 } from "./gamesim";
+
+const round = (a: number[]) => a.map((n) => Math.round(n * 100) / 100);
 
 interface Player {
   id: string;
@@ -20,6 +23,9 @@ export class GameRoom {
   private seed = Math.floor(Math.random() * 1e9);
   private nextId = 1;
   private tick: ReturnType<typeof setInterval> | null = null;
+  private bots = new Map<string, Bot & { id: string; name: string; deadUntil: number }>();
+  private botSeq = 1;
+  private rng = mulberry32(this.seed ^ 0x9e3779b9);
 
   constructor(private state: DurableObjectState, private env: Env) {}
 
@@ -69,8 +75,17 @@ export class GameRoom {
     } else if (msg.t === "state") {
       const s = sanitizeState(msg);
       if (s) { player.p = s.p; player.q = s.q; }
+    } else if (msg.t === "fire") {
+      // relay tracer to others; server doesn't simulate the bullet
+      this.broadcastExcept(player.id, { t: "event", k: "fire", id: player.id, o: msg.o, d: msg.d });
+    } else if (msg.t === "hit") {
+      const now = Date.now();
+      if (now - player.hitAt < HIT_COOLDOWN_MS) return;
+      player.hitAt = now;
+      this.resolveHit(player, String(msg.id), now);
+    } else if (msg.t === "respawn") {
+      if (!player.alive) this.respawnPlayer(player);
     }
-    // "fire" / "hit" / "respawn" handled in Task 4.
   }
 
   private onClose(player: Player) {
@@ -87,7 +102,102 @@ export class GameRoom {
   private stopTick() {
     if (this.tick) { clearInterval(this.tick); this.tick = null; }
   }
-  private onTick() { /* filled in Task 4 */ }
+  private onTick() {
+    const now = Date.now();
+    if (this.players.size === 0) { this.stopTick(); return; }
+    this.topUpBots();
+
+    // advance bots; pick nearest living human as target
+    const humans = [...this.players.values()].filter((p) => p.alive);
+    for (const bot of this.bots.values()) {
+      if (!bot.alive) {
+        if (now >= bot.deadUntil) {
+          bot.p = pickSpawn(this.rng, []); bot.hp = HP_MAX; bot.alive = true;
+          bot.invulnUntil = now + INVULN_MS;
+        }
+        continue;
+      }
+      let target: { p: Vec3 } | null = null, best = Infinity;
+      for (const h of humans) {
+        const d = Math.hypot(h.p[0] - bot.p[0], h.p[1] - bot.p[1], h.p[2] - bot.p[2]);
+        if (d < best) { best = d; target = { p: h.p }; }
+      }
+      const r = stepBot(bot, target, 0.066, now, this.rng);
+      if (r.fired && target && best < 300 && this.rng() < 0.25) {
+        // bot lands a probabilistic hit on its target human
+        const victim = humans.find((h) => h.p === target!.p);
+        if (victim) {
+          const res = applyHit(victim as any, now);
+          if (res.applied) {
+            this.broadcast({ t: "event", k: "hit", id: victim.id, by: bot.id });
+            if (res.died) {
+              this.broadcast({ t: "event", k: "kill", by: bot.id, byName: "Bot", id: victim.id });
+            }
+          }
+        }
+      }
+    }
+
+    this.broadcast(this.snapshot());
+  }
+
+  private snapshot() {
+    return {
+      t: "snapshot",
+      players: [...this.players.values()].map((p) => ({
+        id: p.id, name: p.name, p: round(p.p), q: round(p.q), hp: p.hp, alive: p.alive,
+      })),
+      bots: [...this.bots.values()].map((b) => ({
+        id: b.id, p: round(b.p), q: round(b.q), hp: b.hp, alive: b.alive,
+      })),
+      scores: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, score: p.score })),
+    };
+  }
+
+  private resolveHit(shooter: Player, targetId: string, now: number) {
+    const tp = this.players.get(targetId);
+    const tb = this.bots.get(targetId);
+    const target = tp ?? tb;
+    if (!target || targetId === shooter.id) return;
+    const res = applyHit(target as any, now);
+    if (!res.applied) return;
+    this.broadcast({ t: "event", k: "hit", id: targetId, by: shooter.id });
+    if (res.died) {
+      shooter.score += 1;
+      this.broadcast({ t: "event", k: "kill", by: shooter.id, byName: shooter.name, id: targetId });
+      if (tb) tb.deadUntil = now + RESPAWN_MS;     // bot auto-respawns on tick
+      if (shooter.score >= KILLS_TO_WIN) {
+        this.broadcast({ t: "event", k: "win", id: shooter.id, name: shooter.name });
+        for (const p of this.players.values()) p.score = 0;
+        for (const b of this.bots.values()) b.hp = HP_MAX;
+      }
+    }
+  }
+
+  private respawnPlayer(player: Player) {
+    const others = [...this.players.values()].filter((p) => p !== player).map((p) => p.p);
+    player.p = pickSpawn(this.rng, others);
+    player.hp = HP_MAX; player.alive = true; player.invulnUntil = Date.now() + INVULN_MS;
+  }
+
+  private topUpBots() {
+    const total = this.players.size + this.bots.size;
+    for (let i = total; i < BOT_TARGET && this.players.size > 0; i++) {
+      const id = "b" + this.botSeq++;
+      this.bots.set(id, {
+        id, name: "Bot", p: pickSpawn(this.rng, []), q: [0, 0, 0, 1], v: [0, 0, 0],
+        hp: HP_MAX, alive: true, invulnUntil: 0, fireAt: 0, deadUntil: 0,
+      });
+    }
+  }
+
+  private broadcastExcept(exceptId: string, obj: unknown) {
+    const s = JSON.stringify(obj);
+    for (const p of this.players.values()) {
+      if (p.id === exceptId) continue;
+      try { p.ws.send(s); } catch { /* ignore */ }
+    }
+  }
 
   private send(ws: WebSocket, obj: unknown) {
     try { ws.send(JSON.stringify(obj)); } catch { /* socket gone */ }
