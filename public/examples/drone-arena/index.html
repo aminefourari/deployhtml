@@ -58,13 +58,17 @@
   </div>
 
   <script type="importmap">
-  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  { "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  } }
   </script>
   <script type="module">
     import { hitsBox, pickRayTarget, segmentHitsBox } from "./arena-math.js";
-    let THREE;
+    let THREE, GLTFLoader;
     try {
       THREE = await import("three");
+      ({ GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js"));
     } catch (e) {
       document.getElementById("err").hidden = false;
       throw e;
@@ -107,8 +111,21 @@
     // A detailed tower: main shaft + setback tier + rooftop cap + antenna with a
     // blinking beacon. Geometry only (no extra rng()), so the collision/LoS box
     // stays exactly w x h x d and matches the server's generator.
-    function makeBuilding(w, d, h, tex, mats) {
+    function makeBuilding(w, d, h, tex, mats, model) {
       const grp = new THREE.Group();
+      if (model) {
+        // Real glTF building asset: scale to exactly fill the w x h x d footprint
+        // so the visible model matches the collision/LoS box the server uses.
+        const inner = model.clone(true);
+        const box0 = new THREE.Box3().setFromObject(inner);
+        const size0 = box0.getSize(new THREE.Vector3());
+        const center0 = box0.getCenter(new THREE.Vector3());
+        inner.position.set(-center0.x, -box0.min.y, -center0.z);   // base-centre to origin
+        const pivot = new THREE.Group(); pivot.add(inner);
+        pivot.scale.set(w / (size0.x || 1), h / (size0.y || 1), d / (size0.z || 1));
+        grp.add(pivot);
+        return grp;
+      }
       const facade = new THREE.MeshStandardMaterial({
         color: 0x223047, map: tex, emissive: 0xbcd2ff, emissiveMap: tex,
         emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.75 });
@@ -177,7 +194,7 @@
       }
     }
 
-    function initWorld(seed) {
+    function initWorld(seed, models) {
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       renderer.setSize(innerWidth, innerHeight);
@@ -211,11 +228,13 @@
       for (let i = 0; i < 140; i++) {
         const w = 30 + rng() * 50, d = 30 + rng() * 50, h = 50 + rng() * 260;
         const x = (rng() * 2 - 1) * ARENA * 0.92, z = (rng() * 2 - 1) * ARENA * 0.92;
-        // one rng() picks the facade — same call count the server's generator uses
-        const tex = facades[(rng() * facades.length) | 0].clone();
+        // one rng() — matches the server's discard; picks both facade & model variant
+        const pick = (rng() * 5) | 0;
+        const tex = facades[pick % facades.length].clone();
         tex.needsUpdate = true; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(Math.max(1, Math.round(w / 22)), Math.max(2, Math.round(h / 22)));
-        const grp = makeBuilding(w, d, h, tex, mats);
+        const model = models && models.length ? models[pick % models.length] : null;
+        const grp = makeBuilding(w, d, h, tex, mats, model);
         grp.position.set(x, 0, z);
         // collision/LoS box is the main shaft only (antenna/tier are cosmetic)
         grp.userData.box = new THREE.Box3(
@@ -301,7 +320,7 @@
     }
 
     // ---- networking ----
-    let ws = null, myId = null, worldSeed = 20260617;
+    let ws = null, myId = null, worldSeed = 20260617, building = false;
     const remotes = new Map();   // id -> { mesh, label?, tp, cp, name, hp }
     const BOT_COLOR = 0xf43f5e, PLAYER_COLOR = 0xa78bfa;
     let statusEl, scoreboardEl;
@@ -318,7 +337,7 @@
     function onNet(m) {
       if (m.t === "welcome") {
         myId = m.id; worldSeed = m.seed; window.__killsToWin = m.killsToWin;
-        if (!scene) buildWorldFromSeed();
+        if (!scene && !building) { building = true; buildWorldFromSeed(); }
       } else if (m.t === "snapshot") {
         applySnapshot(m);
       } else if (m.t === "event") {
@@ -456,10 +475,23 @@
     }
 
     let lastT = 0;
-    function buildWorldFromSeed() {
-      initWorld(worldSeed);
+    // Load the CC0 glTF building models (Kenney). Each returns its scene, or null
+    // on failure so the city falls back to the procedural towers.
+    function loadBuildingModels() {
+      const loader = new GLTFLoader();
+      const files = ["skyscraper", "tower-a", "tower-b", "tower-c", "tower-d"];
+      return Promise.all(files.map((f) => new Promise((res) => {
+        loader.load(`./assets/${f}.glb`, (g) => res(g.scene), undefined, () => res(null));
+      }))).then((arr) => { const ok = arr.filter(Boolean); return ok.length ? ok : null; });
+    }
+    async function buildWorldFromSeed() {
+      if (statusEl) statusEl.textContent = "loading city…";
+      let models = null;
+      try { models = await loadBuildingModels(); } catch (e) { models = null; }
+      initWorld(worldSeed, models);
       me.mesh = makeDrone(0x38bdf8); me.mesh.position.copy(me.pos); scene.add(me.mesh);
       renderer.setAnimationLoop(mainLoop);
+      if (statusEl) statusEl.textContent = "online";
     }
 
     function updateSky(t, dt) {

@@ -1,0 +1,15 @@
+3D building models
+==================
+
+Source:  Kenney (https://kenney.nl) — downloaded via Poly Pizza (https://poly.pizza)
+License: CC0 1.0 (Public Domain) — free for any use, no attribution required.
+
+Files:
+  skyscraper.glb   https://poly.pizza/m/obYD8hWLTZ
+  tower-a.glb      https://poly.pizza/m/ppwtREejXg
+  tower-b.glb      https://poly.pizza/m/3IhrYZp6tP
+  tower-c.glb      https://poly.pizza/m/h7Jaq7bqMq
+  tower-d.glb      https://poly.pizza/m/yKo7F36Qk2
+
+Loaded by index.html via three GLTFLoader and scaled to each building footprint;
+the procedural towers remain as a fallback if a model fails to load.
