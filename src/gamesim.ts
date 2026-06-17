@@ -2,7 +2,7 @@
 // directly with node:test via tsx.
 
 export const ARENA = 600;       // half-extent on X and Z
-export const CEIL = 220;        // max altitude
+export const CEIL = 340;        // max altitude (above the tallest building ~316)
 export const FLOOR = 2;         // min altitude
 export const MAX_PLAYERS = 24;
 export const BOT_TARGET = 6;    // humans + bots topped up to this

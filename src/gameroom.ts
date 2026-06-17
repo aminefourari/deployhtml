@@ -1,6 +1,6 @@
 import { Env } from "./env";
 import {
-  Vec3, Quat, MAX_PLAYERS, BOT_TARGET, HP_MAX, KILLS_TO_WIN, INVULN_MS, RESPAWN_MS,
+  Vec3, Quat, ARENA, MAX_PLAYERS, BOT_TARGET, HP_MAX, KILLS_TO_WIN, INVULN_MS, RESPAWN_MS,
   HIT_COOLDOWN_MS, CEIL, Bot, Box, mulberry32, validateName, sanitizeState, RateLimiter,
   pickSpawn, applyHit, stepBot, generateBuildings, lineOfSightBlocked, blockedByBuilding,
 } from "./gamesim";
@@ -191,11 +191,12 @@ export class GameRoom {
 
   // pickSpawn, but biased away from buildings so nothing spawns boxed inside one.
   private clearSpawn(rng: () => number, others: Vec3[]): Vec3 {
-    for (let t = 0; t < 10; t++) {
+    for (let t = 0; t < 12; t++) {
       const s = pickSpawn(rng, others);
       if (!blockedByBuilding(s, this.buildings, 6)) return s;
     }
-    return pickSpawn(rng, others);
+    // last resort: above the skyline (y=322 clears every building top ~316)
+    return [(rng() * 2 - 1) * ARENA * 0.8, 322, (rng() * 2 - 1) * ARENA * 0.8];
   }
 
   private respawnPlayer(player: Player) {
