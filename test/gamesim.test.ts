@@ -86,7 +86,7 @@ test("stepBot with no target just drifts in bounds", () => {
   assert.ok(bot.p[1] >= FLOOR && bot.p[1] <= CEIL);
 });
 
-import { generateBuildings, segmentHitsBox, lineOfSightBlocked } from "../src/gamesim.ts";
+import { generateBuildings, segmentHitsBox, lineOfSightBlocked, blockedByBuilding } from "../src/gamesim.ts";
 
 test("generateBuildings is deterministic and bounded", () => {
   const a = generateBuildings(424242);
@@ -116,4 +116,12 @@ test("lineOfSightBlocked: a building between two points blocks LoS; a clear lane
   const boxes = [{ min: [-5, 0, 40] as Vec3, max: [5, 100, 60] as Vec3 }];
   assert.equal(lineOfSightBlocked([0, 50, 0], [0, 50, 120], boxes), true);    // wall at z~50 between
   assert.equal(lineOfSightBlocked([0, 50, 0], [200, 50, 0], boxes), false);   // clear along x
+});
+
+test("blockedByBuilding: inside is blocked; over the roof and far away are clear", () => {
+  const boxes = [{ min: [-10, 0, -10] as Vec3, max: [10, 100, 10] as Vec3 }];
+  assert.equal(blockedByBuilding([0, 50, 0], boxes, 6), true);     // inside the box
+  assert.equal(blockedByBuilding([0, 110, 0], boxes, 6), false);   // 110 > 100 + 6 -> over the roof
+  assert.equal(blockedByBuilding([100, 50, 0], boxes, 6), false);  // far on x
+  assert.equal(blockedByBuilding([14, 50, 0], boxes, 6), true);    // within the r=6 skin (14 < 10 + 6)
 });

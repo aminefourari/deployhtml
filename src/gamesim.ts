@@ -181,3 +181,14 @@ export function lineOfSightBlocked(p0: Vec3, p1: Vec3, boxes: Box[]): boolean {
   for (const b of boxes) if (segmentHitsBox(p0, p1, b.min, b.max)) return true;
   return false;
 }
+
+// True if a sphere of radius r at p overlaps any building — same footprint /
+// height rule the client uses for the local drone, so bots respect walls too.
+export function blockedByBuilding(p: Vec3, boxes: Box[], r: number): boolean {
+  for (const b of boxes) {
+    if (p[0] > b.min[0] - r && p[0] < b.max[0] + r &&
+        p[2] > b.min[2] - r && p[2] < b.max[2] + r &&
+        p[1] > b.min[1] && p[1] < b.max[1] + r) return true;
+  }
+  return false;
+}

@@ -1,8 +1,8 @@
 import { Env } from "./env";
 import {
   Vec3, Quat, MAX_PLAYERS, BOT_TARGET, HP_MAX, KILLS_TO_WIN, INVULN_MS, RESPAWN_MS,
-  HIT_COOLDOWN_MS, Bot, Box, mulberry32, validateName, sanitizeState, RateLimiter,
-  pickSpawn, applyHit, stepBot, generateBuildings, lineOfSightBlocked,
+  HIT_COOLDOWN_MS, CEIL, Bot, Box, mulberry32, validateName, sanitizeState, RateLimiter,
+  pickSpawn, applyHit, stepBot, generateBuildings, lineOfSightBlocked, blockedByBuilding,
 } from "./gamesim";
 
 const round = (a: number[]) => a.map((n) => Math.round(n * 100) / 100);
@@ -124,7 +124,14 @@ export class GameRoom {
         const d = Math.hypot(h.p[0] - bot.p[0], h.p[1] - bot.p[1], h.p[2] - bot.p[2]);
         if (d < best) { best = d; target = h; }
       }
+      const prevX = bot.p[0], prevZ = bot.p[2];
       const r = stepBot(bot, target, 0.066, now, this.rng);
+      // Don't let bots fly through buildings: revert the horizontal move on a
+      // collision and climb so they rise to clear the obstacle.
+      if (blockedByBuilding(bot.p, this.buildings, 6)) {
+        bot.p[0] = prevX; bot.p[2] = prevZ;
+        bot.p[1] = Math.min(CEIL, bot.p[1] + 8);
+      }
       if (r.fired && target && best < 300 && this.rng() < 0.25 &&
           !lineOfSightBlocked(bot.p, target.p, this.buildings)) {
         // bot lands a probabilistic hit on its target human (needs clear line of sight)

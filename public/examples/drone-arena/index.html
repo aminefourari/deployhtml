@@ -28,6 +28,8 @@
   #status{position:absolute;top:12px;right:14px;font-size:12px;color:var(--muted)}
   #crosshair{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);border:1px solid rgba(125,211,252,.7);border-radius:50%}
   #banner{position:absolute;left:50%;top:20%;transform:translateX(-50%);font-size:26px;font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(125,211,252,.85);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 26px;display:none;white-space:nowrap}
+  #ctrls{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;line-height:1.5}
+  #ctrls b{color:var(--text)}
   #respawn{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,7,15,.55);pointer-events:auto}
   #respawn .panel{cursor:pointer}
 </style>
@@ -38,6 +40,7 @@
     <div id="scoreboard"></div>
     <div id="status">connecting…</div>
     <div id="banner"></div>
+    <div id="ctrls"><b>WASD</b> move · <b>mouse</b> aim · <b>Space</b> fire · <b>E</b> up · <b>Q</b>/<b>Shift</b> down</div>
     <div id="crosshair"></div>
     <div id="respawn"><div class="panel"><h1 style="font-size:26px">You were shot down</h1><p class="tag">Click to respawn</p></div></div>
   </div>
@@ -80,6 +83,27 @@
     const ARENA = 600, CEIL = 220;
 
     let renderer, scene, camera, buildings = [];
+
+    // Procedural skyscraper facades: a grid of lit/dark windows baked to a canvas
+    // texture. Four palettes; tiled per building. No external asset files.
+    function makeFacades() {
+      const palettes = [["#9fd0ff","#bcdcff"],["#ffe6a8","#ffd27a"],["#c9b3ff","#a88bff"],["#a8ffe0","#7af0c8"]];
+      return palettes.map((pal) => {
+        const c = document.createElement("canvas"); c.width = 128; c.height = 128;
+        const g = c.getContext("2d");
+        g.fillStyle = "#070b16"; g.fillRect(0, 0, 128, 128);
+        const cols = 6, rows = 6, cw = 128 / cols, ch = 128 / rows;
+        for (let yy = 0; yy < rows; yy++) for (let xx = 0; xx < cols; xx++) {
+          const lit = Math.random() < 0.55;
+          g.fillStyle = lit ? pal[(Math.random() * pal.length) | 0] : "#0e1630";
+          g.fillRect(xx * cw + 2, yy * ch + 2, cw - 4, ch - 4);
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        return tex;
+      });
+    }
+
     function initWorld(seed) {
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -100,15 +124,19 @@
       const grid = new THREE.GridHelper(ARENA * 2.4, 60, 0x1b3a6b, 0x12244a);
       grid.position.y = 0.1; scene.add(grid);
 
-      // deterministic buildings (same seed -> same city on every client)
+      // deterministic buildings (same seed -> same city on every client AND server)
       const rng = mulberry32(seed);
-      const colors = [0x1d4ed8, 0x7c3aed, 0x0891b2, 0xdb2777];
+      const facades = makeFacades();
       for (let i = 0; i < 140; i++) {
         const w = 30 + rng() * 50, d = 30 + rng() * 50, h = 50 + rng() * 260;
         const x = (rng() * 2 - 1) * ARENA * 0.92, z = (rng() * 2 - 1) * ARENA * 0.92;
+        // one rng() picks the facade — same call count the server's generator uses
+        const tex = facades[(rng() * facades.length) | 0].clone();
+        tex.needsUpdate = true; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(Math.max(1, Math.round(w / 22)), Math.max(2, Math.round(h / 22)));
         const mat = new THREE.MeshStandardMaterial({
-          color: 0x0b1022, emissive: colors[(rng() * colors.length) | 0], emissiveIntensity: 0.25,
-          metalness: 0.4, roughness: 0.6 });
+          color: 0x223047, map: tex, emissive: 0xbcd2ff, emissiveMap: tex,
+          emissiveIntensity: 0.55, metalness: 0.3, roughness: 0.75 });
         const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
         b.position.set(x, h / 2, z);
         b.userData.box = new THREE.Box3().setFromObject(b);
@@ -164,7 +192,7 @@
       const SP = 360;
       if (keys.KeyW) accel.add(fwd); if (keys.KeyS) accel.sub(fwd);
       if (keys.KeyD) accel.add(right); if (keys.KeyA) accel.sub(right);
-      if (keys.KeyE) accel.y += 1; if (keys.KeyQ) accel.y -= 1;
+      if (keys.KeyE) accel.y += 1; if (keys.KeyQ || keys.ShiftLeft || keys.ShiftRight) accel.y -= 1;
       if (accel.lengthSq() > 0) accel.normalize().multiplyScalar(SP);
       me.vel.addScaledVector(accel, dt);
       me.vel.multiplyScalar(Math.exp(-1.8 * dt));            // drag
@@ -287,6 +315,7 @@
     // ---- combat FX ----
     const tracers = [];   // { line, life }
     const bursts = [];    // { pts, vel, life }
+    const shots = [];     // { mesh, vel, life } — visible travelling bolts
     let fireAt = 0;
 
     function spawnTracer(from, to, color) {
@@ -303,6 +332,12 @@
       const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size: 2.5 }));
       scene.add(pts); bursts.push({ pts, vel, life: 0.7 });
     }
+    function spawnShot(origin, dir, color) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 8), new THREE.MeshBasicMaterial({ color }));
+      mesh.position.copy(origin);
+      scene.add(mesh);
+      shots.push({ mesh, vel: dir.clone().multiplyScalar(700), life: 1.0 });
+    }
 
     function tryFire() {
       if (dead || !ws || ws.readyState !== 1 || performance.now() < fireAt) return;
@@ -311,6 +346,7 @@
       const dir = new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), Math.cos(yaw)*Math.cos(pitch)).normalize();
       ws.send(JSON.stringify({ t: "fire", o: origin.toArray(), d: dir.toArray() }));
       spawnTracer(origin, origin.clone().addScaledVector(dir, 900), 0x9fe8ff);
+      spawnShot(origin, dir, 0x9fe8ff);
 
       // client-side hit detection vs remote drones (ray-sphere, nearest in front; see arena-math.js).
       // Skip any target with a building between us — buildings are real cover.
@@ -333,6 +369,9 @@
         for (let j = 0; j < b.vel.length; j++) { pos.array[j*3]+=b.vel[j].x*dt; pos.array[j*3+1]+=b.vel[j].y*dt; pos.array[j*3+2]+=b.vel[j].z*dt; }
         pos.needsUpdate = true;
         if (b.life <= 0) { scene.remove(b.pts); bursts.splice(i,1); } }
+      for (let i = shots.length - 1; i >= 0; i--) { const s = shots[i]; s.life -= dt;
+        s.mesh.position.addScaledVector(s.vel, dt);
+        if (s.life <= 0) { scene.remove(s.mesh); shots.splice(i,1); } }
     }
 
     let lastT = 0;
@@ -375,6 +414,7 @@
       if (m.k === "fire") {
         const o = new THREE.Vector3().fromArray(m.o), d = new THREE.Vector3().fromArray(m.d);
         spawnTracer(o, o.clone().addScaledVector(d, 900), 0xff9ec2);
+        spawnShot(o, d, 0xff9ec2);
       } else if (m.k === "hit") {
         const r = remotes.get(m.id); if (r) spawnBurst(r.mesh.position, 0xffd27a);
         if (m.id === myId) { spawnBurst(me.pos, 0xffd27a); me.hp = (me.hp ?? 100) - 13; if (me.hp <= 0) showDeath(); }
