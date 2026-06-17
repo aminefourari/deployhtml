@@ -117,22 +117,19 @@ export class GameRoom {
         }
         continue;
       }
-      let target: { p: Vec3 } | null = null, best = Infinity;
+      let target: Player | null = null, best = Infinity;
       for (const h of humans) {
         const d = Math.hypot(h.p[0] - bot.p[0], h.p[1] - bot.p[1], h.p[2] - bot.p[2]);
-        if (d < best) { best = d; target = { p: h.p }; }
+        if (d < best) { best = d; target = h; }
       }
       const r = stepBot(bot, target, 0.066, now, this.rng);
       if (r.fired && target && best < 300 && this.rng() < 0.25) {
         // bot lands a probabilistic hit on its target human
-        const victim = humans.find((h) => h.p === target!.p);
-        if (victim) {
-          const res = applyHit(victim as any, now);
-          if (res.applied) {
-            this.broadcast({ t: "event", k: "hit", id: victim.id, by: bot.id });
-            if (res.died) {
-              this.broadcast({ t: "event", k: "kill", by: bot.id, byName: "Bot", id: victim.id });
-            }
+        const res = applyHit(target as any, now);
+        if (res.applied) {
+          this.broadcast({ t: "event", k: "hit", id: target.id, by: bot.id });
+          if (res.died) {
+            this.broadcast({ t: "event", k: "kill", by: bot.id, byName: "Bot", id: target.id });
           }
         }
       }
@@ -169,7 +166,7 @@ export class GameRoom {
       if (shooter.score >= KILLS_TO_WIN) {
         this.broadcast({ t: "event", k: "win", id: shooter.id, name: shooter.name });
         for (const p of this.players.values()) p.score = 0;
-        for (const b of this.bots.values()) b.hp = HP_MAX;
+        for (const b of this.bots.values()) { b.hp = HP_MAX; b.alive = true; b.deadUntil = 0; b.invulnUntil = 0; }
       }
     }
   }
