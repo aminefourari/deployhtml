@@ -82,7 +82,7 @@
       t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296; }; };
     const ARENA = 600, CEIL = 220;
 
-    let renderer, scene, camera, buildings = [];
+    let renderer, scene, camera, buildings = [], clouds = [], beacons = [];
 
     // Procedural skyscraper facades: a grid of lit/dark windows baked to a canvas
     // texture. Four palettes; tiled per building. No external asset files.
@@ -104,17 +104,93 @@
       });
     }
 
+    // A detailed tower: main shaft + setback tier + rooftop cap + antenna with a
+    // blinking beacon. Geometry only (no extra rng()), so the collision/LoS box
+    // stays exactly w x h x d and matches the server's generator.
+    function makeBuilding(w, d, h, tex, mats) {
+      const grp = new THREE.Group();
+      const facade = new THREE.MeshStandardMaterial({
+        color: 0x223047, map: tex, emissive: 0xbcd2ff, emissiveMap: tex,
+        emissiveIntensity: 0.5, metalness: 0.3, roughness: 0.75 });
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), facade);
+      tower.position.y = h / 2; grp.add(tower);
+      const th = h * 0.26, tw = w * 0.62, td = d * 0.62;
+      const tier = new THREE.Mesh(new THREE.BoxGeometry(tw, th, td), facade);
+      tier.position.y = h + th / 2; grp.add(tier);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(tw * 0.7, 5, td * 0.7), mats.cap);
+      cap.position.y = h + th + 2.5; grp.add(cap);
+      const antH = 14 + h * 0.16;
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.0, antH, 6), mats.ant);
+      ant.position.y = h + th + 5 + antH / 2; grp.add(ant);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), mats.beacon);
+      beacon.position.y = h + th + 5 + antH; grp.add(beacon);
+      beacons.push(beacon);
+      return grp;
+    }
+
+    // Dusk gradient sky dome (zenith at the top, warm horizon at the bottom —
+    // CanvasTexture flipY maps canvas-top to the +Y pole).
+    function makeSky() {
+      const c = document.createElement("canvas"); c.width = 8; c.height = 256;
+      const g = c.getContext("2d");
+      const grad = g.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0.0, "#070b1c"); grad.addColorStop(0.5, "#1b2150");
+      grad.addColorStop(0.8, "#4a2e63"); grad.addColorStop(1.0, "#b9663e");
+      g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
+      const tex = new THREE.CanvasTexture(c);
+      scene.add(new THREE.Mesh(new THREE.SphereGeometry(2600, 24, 16),
+        new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })));
+    }
+
+    function makeSun(dir) {
+      const c = document.createElement("canvas"); c.width = 128; c.height = 128;
+      const g = c.getContext("2d");
+      const grad = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+      grad.addColorStop(0, "rgba(255,250,238,1)");
+      grad.addColorStop(0.22, "rgba(255,214,150,0.95)");
+      grad.addColorStop(0.5, "rgba(255,150,95,0.35)");
+      grad.addColorStop(1, "rgba(255,130,90,0)");
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, fog: false }));
+      spr.scale.set(520, 520, 1); spr.position.copy(dir); scene.add(spr);
+    }
+
+    function makeClouds() {
+      const c = document.createElement("canvas"); c.width = 128; c.height = 64;
+      const g = c.getContext("2d");
+      for (let i = 0; i < 22; i++) {
+        const x = 16 + Math.random() * 96, y = 18 + Math.random() * 28, r = 8 + Math.random() * 20;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, "rgba(214,222,245,0.55)"); grad.addColorStop(1, "rgba(214,222,245,0)");
+        g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      clouds = [];
+      for (let i = 0; i < 16; i++) {
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: tex, transparent: true, depthWrite: false, opacity: 0.85, fog: false }));
+        const s = 320 + Math.random() * 360;
+        spr.scale.set(s, s * 0.5, 1);
+        spr.position.set((Math.random() * 2 - 1) * 2200, 360 + Math.random() * 260, (Math.random() * 2 - 1) * 2200);
+        scene.add(spr); clouds.push(spr);
+      }
+    }
+
     function initWorld(seed) {
       renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       renderer.setSize(innerWidth, innerHeight);
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x05070f);
-      scene.fog = new THREE.Fog(0x05070f, 300, 1200);
-      camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.5, 3000);
+      scene.background = new THREE.Color(0x1b2150);
+      scene.fog = new THREE.Fog(0x2a2350, 500, 2000);
+      camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.5, 7000);
 
-      scene.add(new THREE.HemisphereLight(0x335577, 0x0a0a18, 1.1));
-      const key = new THREE.DirectionalLight(0x88aaff, 0.8); key.position.set(200, 400, 100); scene.add(key);
+      scene.add(new THREE.HemisphereLight(0x8a9bd0, 0x141022, 1.0));
+      const sunDir = new THREE.Vector3(-1100, 560, -1700);
+      const sun = new THREE.DirectionalLight(0xffd9a8, 1.1); sun.position.copy(sunDir); scene.add(sun);
+
+      makeSky(); makeSun(sunDir); makeClouds();
 
       // ground grid
       const ground = new THREE.Mesh(
@@ -127,6 +203,11 @@
       // deterministic buildings (same seed -> same city on every client AND server)
       const rng = mulberry32(seed);
       const facades = makeFacades();
+      const mats = {
+        cap: new THREE.MeshStandardMaterial({ color: 0x0a0e1c, metalness: 0.6, roughness: 0.4 }),
+        ant: new THREE.MeshStandardMaterial({ color: 0x9aa6c0, metalness: 0.7, roughness: 0.4 }),
+        beacon: new THREE.MeshBasicMaterial({ color: 0xff5a5a }),
+      };
       for (let i = 0; i < 140; i++) {
         const w = 30 + rng() * 50, d = 30 + rng() * 50, h = 50 + rng() * 260;
         const x = (rng() * 2 - 1) * ARENA * 0.92, z = (rng() * 2 - 1) * ARENA * 0.92;
@@ -134,13 +215,13 @@
         const tex = facades[(rng() * facades.length) | 0].clone();
         tex.needsUpdate = true; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(Math.max(1, Math.round(w / 22)), Math.max(2, Math.round(h / 22)));
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x223047, map: tex, emissive: 0xbcd2ff, emissiveMap: tex,
-          emissiveIntensity: 0.55, metalness: 0.3, roughness: 0.75 });
-        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-        b.position.set(x, h / 2, z);
-        b.userData.box = new THREE.Box3().setFromObject(b);
-        scene.add(b); buildings.push(b);
+        const grp = makeBuilding(w, d, h, tex, mats);
+        grp.position.set(x, 0, z);
+        // collision/LoS box is the main shaft only (antenna/tier are cosmetic)
+        grp.userData.box = new THREE.Box3(
+          new THREE.Vector3(x - w / 2, 0, z - d / 2),
+          new THREE.Vector3(x + w / 2, h, z + d / 2));
+        scene.add(grp); buildings.push(grp);
       }
       addEventListener("resize", () => {
         camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -381,11 +462,18 @@
       renderer.setAnimationLoop(mainLoop);
     }
 
+    function updateSky(t, dt) {
+      for (const cl of clouds) { cl.position.x += 5 * dt; if (cl.position.x > 2300) cl.position.x -= 4600; }
+      const on = (t % 1600) < 800;                 // blink rooftop beacons together
+      for (const bc of beacons) bc.visible = on;
+    }
+
     function mainLoop(t) {
       const dt = Math.min(0.05, (t - lastT) / 1000 || 0); lastT = t;
       updateLocalDrone(dt);
       interpolateRemotes(dt);
       updateFx(dt);
+      updateSky(t, dt);
       sendState(dt);
       renderer.render(scene, camera);
     }

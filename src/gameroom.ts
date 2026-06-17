@@ -132,14 +132,22 @@ export class GameRoom {
         bot.p[0] = prevX; bot.p[2] = prevZ;
         bot.p[1] = Math.min(CEIL, bot.p[1] + 8);
       }
-      if (r.fired && target && best < 300 && this.rng() < 0.25 &&
-          !lineOfSightBlocked(bot.p, target.p, this.buildings)) {
-        // bot lands a probabilistic hit on its target human (needs clear line of sight)
-        const res = applyHit(target as any, now);
-        if (res.applied) {
-          this.broadcast({ t: "event", k: "hit", id: target.id, by: bot.id });
-          if (res.died) {
-            this.broadcast({ t: "event", k: "kill", by: bot.id, byName: "Bot", id: target.id });
+      if (r.fired && target && best < 460 && !lineOfSightBlocked(bot.p, target.p, this.buildings)) {
+        // Show the bot's shot to everyone (a little spread so misses visibly veer)...
+        const dx = target.p[0] - bot.p[0], dy = target.p[1] - bot.p[1], dz = target.p[2] - bot.p[2];
+        const len = Math.hypot(dx, dy, dz) || 1;
+        const sp = () => (this.rng() - 0.5) * 0.07;
+        this.broadcast({ t: "event", k: "fire", id: bot.id, o: bot.p,
+          d: [dx / len + sp(), dy / len + sp(), dz / len + sp()] });
+        // ...then roll a LOW, distance-scaled hit chance so players aren't melted.
+        const acc = 0.13 * (1 - best / 460);   // ~13% point-blank, ~0% at max range
+        if (this.rng() < acc) {
+          const res = applyHit(target as any, now);
+          if (res.applied) {
+            this.broadcast({ t: "event", k: "hit", id: target.id, by: bot.id });
+            if (res.died) {
+              this.broadcast({ t: "event", k: "kill", by: bot.id, byName: "Bot", id: target.id });
+            }
           }
         }
       }
