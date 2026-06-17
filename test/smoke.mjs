@@ -35,10 +35,11 @@ for (let i = 0; i < 20 && !sawA; i++) {
 assert.ok(sawA, "B saw A's reported position via snapshot");
 console.log("relay OK");
 
-// B reports a hit on A; A's hp should drop in a later snapshot
-b.send(JSON.stringify({ t: "hit", id: wa.id }));
+// B reports hits on A until A's HP drops. A has ~1.5s spawn invulnerability, so
+// keep firing across snapshots (~66ms each) until a hit lands after it expires.
 let hurt = false;
-for (let i = 0; i < 20 && !hurt; i++) {
+for (let i = 0; i < 40 && !hurt; i++) {
+  b.send(JSON.stringify({ t: "hit", id: wa.id }));
   const snap = await next(b, "snapshot");
   const pa = snap.players.find((p) => p.id === wa.id);
   if (pa && pa.hp < 100) hurt = true;
