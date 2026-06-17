@@ -117,11 +117,82 @@
       });
     }
 
+    function makeDrone(color) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0x0b1022, emissive: color, emissiveIntensity: 0.5 }));
+      g.add(body);
+      const armMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 });
+      for (const [sx, sz] of [[1,1],[1,-1],[-1,1],[-1,-1]]) {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 7), armMat);
+        arm.rotation.z = Math.PI / 2; arm.rotation.y = Math.atan2(sz, sx); arm.position.set(sx*2.5, 0, sz*2.5);
+        g.add(arm);
+        const rotor = new THREE.Mesh(new THREE.TorusGeometry(2, 0.25, 6, 14), armMat);
+        rotor.rotation.x = Math.PI / 2; rotor.position.set(sx*5, 0, sz*5); g.add(rotor);
+      }
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.7, 3, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.4 }));
+      nose.rotation.x = Math.PI / 2; nose.position.set(0, 0, 4); g.add(nose);
+      return g;
+    }
+
+    const keys = Object.create(null);
+    addEventListener("keydown", (e) => { keys[e.code] = true; if (["Space","ShiftLeft"].includes(e.code)) e.preventDefault(); });
+    addEventListener("keyup", (e) => { keys[e.code] = false; });
+    let yaw = 0, pitch = 0;
+    addEventListener("mousemove", (e) => {
+      if (document.pointerLockElement) { yaw -= e.movementX * 0.0025; pitch = Math.max(-0.6, Math.min(0.6, pitch - e.movementY * 0.0025)); }
+    });
+    document.getElementById("c").addEventListener("click", () => document.getElementById("c").requestPointerLock());
+
+    const me = { mesh: null, vel: new THREE.Vector3(), pos: new THREE.Vector3(0, 120, 0) };
+
+    function updateLocalDrone(dt) {
+      const fwd = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const accel = new THREE.Vector3();
+      const SP = 360;
+      if (keys.KeyW) accel.add(fwd); if (keys.KeyS) accel.sub(fwd);
+      if (keys.KeyD) accel.add(right); if (keys.KeyA) accel.sub(right);
+      if (keys.Space) accel.y += 1; if (keys.ShiftLeft) accel.y -= 1;
+      if (accel.lengthSq() > 0) accel.normalize().multiplyScalar(SP);
+      me.vel.addScaledVector(accel, dt);
+      me.vel.multiplyScalar(Math.exp(-1.8 * dt));            // drag
+      const want = me.pos.clone().addScaledVector(me.vel, dt);
+
+      // building collision: revert horizontal move into a solid box
+      const r = 4;
+      for (const b of buildings) {
+        const box = b.userData.box;
+        if (want.x > box.min.x - r && want.x < box.max.x + r &&
+            want.z > box.min.z - r && want.z < box.max.z + r &&
+            want.y > box.min.y && want.y < box.max.y + r) {
+          want.x = me.pos.x; want.z = me.pos.z; me.vel.x *= -0.2; me.vel.z *= -0.2; break;
+        }
+      }
+      want.x = Math.max(-ARENA, Math.min(ARENA, want.x));
+      want.z = Math.max(-ARENA, Math.min(ARENA, want.z));
+      want.y = Math.max(3, Math.min(CEIL, want.y));
+      me.pos.copy(want);
+
+      me.mesh.position.copy(me.pos);
+      me.mesh.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, "YXZ"));
+
+      // chase cam behind + above the drone
+      const camOff = new THREE.Vector3(-Math.sin(yaw) * 26, 9, -Math.cos(yaw) * 26);
+      camera.position.lerp(me.pos.clone().add(camOff), Math.min(1, dt * 6));
+      camera.lookAt(me.pos.clone().addScaledVector(fwd, 30));
+    }
+
+    let lastT = 0;
     function startGame(name) {
-      // seed is provided by the server in Task 10; use a temporary fixed seed for now
       initWorld(20260617);
-      camera.position.set(0, 120, 260); camera.lookAt(0, 80, 0);
-      renderer.setAnimationLoop(() => renderer.render(scene, camera));
+      me.mesh = makeDrone(0x38bdf8); me.mesh.position.copy(me.pos); scene.add(me.mesh);
+      renderer.setAnimationLoop((t) => {
+        const dt = Math.min(0.05, (t - lastT) / 1000 || 0); lastT = t;
+        updateLocalDrone(dt);
+        renderer.render(scene, camera);
+      });
     }
     // ===== GAME CODE ends here =====
   </script>
