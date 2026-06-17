@@ -210,11 +210,28 @@
       }
     }
 
+    function makeLabel() {
+      const cv = document.createElement("canvas"); cv.width = 256; cv.height = 64;
+      const g = cv.getContext("2d");
+      const draw = (name, hp) => {
+        g.clearRect(0,0,256,64);
+        g.font = "bold 26px monospace"; g.fillStyle = "#e7eeff"; g.textAlign = "center";
+        g.fillText(name, 128, 28);
+        g.fillStyle = "rgba(255,255,255,.2)"; g.fillRect(78, 38, 100, 8);
+        g.fillStyle = hp > 50 ? "#34d399" : hp > 25 ? "#fbbf24" : "#f43f5e"; g.fillRect(78, 38, hp, 8);
+      };
+      const tex = new THREE.CanvasTexture(cv);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+      sprite.scale.set(28, 7, 1); sprite.position.y = 8;
+      sprite.userData = { tex, draw, cv }; return sprite;
+    }
+
     function ensureRemote(id, isBot) {
       let r = remotes.get(id);
       if (!r) {
         const mesh = makeDrone(isBot ? BOT_COLOR : PLAYER_COLOR); scene.add(mesh);
-        r = { mesh, tp: null, cp: null }; remotes.set(id, r);
+        const label = makeLabel(); mesh.add(label);
+        r = { mesh, label, tp: null, cp: null, name: "", hp: 100 }; remotes.set(id, r);
       }
       return r;
     }
@@ -229,10 +246,13 @@
           const r = ensureRemote(e.id, isBot);
           r.tp = { p: e.p, q: e.q };
           r.mesh.visible = e.alive;
+          r.name = e.name || (isBot ? "Bot" : "Pilot"); r.hp = e.hp;
+          r.label.userData.draw(r.name, Math.max(0, e.hp)); r.label.userData.tex.needsUpdate = true;
         }
       }
       for (const [id, r] of remotes) if (!seen.has(id)) { scene.remove(r.mesh); remotes.delete(id); }
       updateScoreboard(m.scores);
+      statusEl.textContent = `${m.players.length} online · ${m.bots.length} bots`;
     }
 
     function interpolateRemotes(dt) {
