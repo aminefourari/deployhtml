@@ -283,6 +283,19 @@
 
     const me = { mesh: null, vel: new THREE.Vector3(), pos: new THREE.Vector3(0, 120, 0) };
 
+    function insideBuilding(p, r) {
+      for (const b of buildings) if (hitsBox(p, b.userData.box.min, b.userData.box.max, r)) return true;
+      return false;
+    }
+    // Pick a spawn that isn't inside a building; last resort is above the skyline.
+    function clearSpawn() {
+      for (let t = 0; t < 40; t++) {
+        const p = new THREE.Vector3((Math.random()*2-1)*460, 70 + Math.random()*150, (Math.random()*2-1)*460);
+        if (!insideBuilding(p, 6)) return p;
+      }
+      return new THREE.Vector3((Math.random()*2-1)*460, 360, (Math.random()*2-1)*460);
+    }
+
     function updateLocalDrone(dt) {
       const fwd = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
       // chase cam looks toward +Z (opposite of Three's default -Z view), which
@@ -489,6 +502,7 @@
       let models = null;
       try { models = await loadBuildingModels(); } catch (e) { models = null; }
       initWorld(worldSeed, models);
+      me.pos.copy(clearSpawn());                       // don't start inside a building
       me.mesh = makeDrone(0x38bdf8); me.mesh.position.copy(me.pos); scene.add(me.mesh);
       renderer.setAnimationLoop(mainLoop);
       if (statusEl) statusEl.textContent = "online";
@@ -557,7 +571,7 @@
     respawnEl.addEventListener("click", () => {
       respawnEl.style.display = "none"; dead = false;
       for (const k in keys) keys[k] = false;
-      me.hp = 100; me.pos.set((Math.random()*2-1)*300, 120, (Math.random()*2-1)*300); me.vel.set(0, 0, 0);
+      me.hp = 100; me.pos.copy(clearSpawn()); me.vel.set(0, 0, 0);
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "respawn" }));
       renderer.setAnimationLoop(mainLoop);
     });

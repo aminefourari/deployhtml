@@ -49,7 +49,7 @@ export class GameRoom {
     const id = "p" + this.nextId++;
     const rng = mulberry32(this.seed ^ (this.nextId * 2654435761));
     const others = [...this.players.values()].map((p) => p.p);
-    const spawn = pickSpawn(rng, others);
+    const spawn = this.clearSpawn(rng, others);
     const player: Player = {
       id, name: "Pilot", ws, p: spawn, q: [0, 0, 0, 1],
       hp: HP_MAX, alive: true, invulnUntil: Date.now() + INVULN_MS,
@@ -114,7 +114,7 @@ export class GameRoom {
     for (const bot of this.bots.values()) {
       if (!bot.alive) {
         if (now >= bot.deadUntil) {
-          bot.p = pickSpawn(this.rng, []); bot.hp = HP_MAX; bot.alive = true;
+          bot.p = this.clearSpawn(this.rng, []); bot.hp = HP_MAX; bot.alive = true;
           bot.invulnUntil = now + INVULN_MS;
         }
         continue;
@@ -189,9 +189,18 @@ export class GameRoom {
     }
   }
 
+  // pickSpawn, but biased away from buildings so nothing spawns boxed inside one.
+  private clearSpawn(rng: () => number, others: Vec3[]): Vec3 {
+    for (let t = 0; t < 10; t++) {
+      const s = pickSpawn(rng, others);
+      if (!blockedByBuilding(s, this.buildings, 6)) return s;
+    }
+    return pickSpawn(rng, others);
+  }
+
   private respawnPlayer(player: Player) {
     const others = [...this.players.values()].filter((p) => p !== player).map((p) => p.p);
-    player.p = pickSpawn(this.rng, others);
+    player.p = this.clearSpawn(this.rng, others);
     player.hp = HP_MAX; player.alive = true; player.invulnUntil = Date.now() + INVULN_MS;
   }
 
@@ -200,7 +209,7 @@ export class GameRoom {
     for (let i = total; i < BOT_TARGET && this.players.size > 0; i++) {
       const id = "b" + this.botSeq++;
       this.bots.set(id, {
-        id, name: "Bot", p: pickSpawn(this.rng, []), q: [0, 0, 0, 1], v: [0, 0, 0],
+        id, name: "Bot", p: this.clearSpawn(this.rng, []), q: [0, 0, 0, 1], v: [0, 0, 0],
         hp: HP_MAX, alive: true, invulnUntil: 0, fireAt: 0, deadUntil: 0,
       });
     }
